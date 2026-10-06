@@ -1,0 +1,17 @@
+{
+  "reason": "User requested repair of A6000 initialization hang",
+  "files": {
+    ".venv-a6000-warmup/lib/python3.12/site-packages/vllm/v1/worker/workspace.py": {
+      "before_sha256": "d0650393bc657064acc97fe2b227ebff8f85799a8f727a8c136098f1f79964df",
+      "after_sha256": "f4ece78723a077acf8d58e0484ca5ebb815cbc2a4b3342c0b966619e39d1b9c4"
+    },
+    ".venv-a6000-warmup/lib/python3.12/site-packages/vllm/v1/worker/gpu_model_runner.py": {
+      "before_sha256": "81b7627fbe81f7aaa2f77b4bf085faa353c69d03662ebfe369536a9773bb70d0",
+      "after_sha256": "f25eeea401f42bc759d555c8ae6ed6ff749d753c1a43e9d7599f50e0fa8ca456"
+    },
+    ".venv-a6000-warmup/lib/python3.12/site-packages/afd_plugin/v1/worker/ffn_model_runner.py": {
+      "before_sha256": "01ffb3e01a4cbbaf1627e0c617f2300080b466f2fac57e40afcc59ca9ae59007",
+      "after_sha256": "b709338e00a284b7844cbaf77f0b1be7845b22e29ee75d08179a33a4bc80513d"
+    }
+  }
+}

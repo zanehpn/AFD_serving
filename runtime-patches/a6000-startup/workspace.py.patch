@@ -1,0 +1,13 @@
+--- a/vllm/v1/worker/workspace.py
++++ b/vllm/v1/worker/workspace.py
+@@ -172,7 +172,9 @@
+             # allocation below. Without this, each resize may leave a
+             # dead segment in reserved memory which can cause higher peak
+             # memory usage.
+-            torch.accelerator.empty_cache()
++            # A6000 AFD: do not synchronize the device while a peer may
++            # still be waiting for this FFN result. The caching allocator
++            # owns and reuses the released tensor storage.
+             self._current_workspaces[ubatch_id] = torch.empty(
+                 (required_bytes,), dtype=torch.uint8, device=self._device
+             )

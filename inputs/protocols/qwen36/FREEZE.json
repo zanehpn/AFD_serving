@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "status": "frozen_calibration_policy",
+  "frozen_at": "2026-09-06T01:28:37+08:00",
+  "selection_split": "calibration",
+  "heldout_requests_used_for_tuning": 0,
+  "slo_contract": "p90_ttft_and_p90_tpot_each_at_most_1.05x_and_output_tps_at_least_0.95x_matched_max",
+  "calibration_root": "results/afd_suites/Qwen3.6-35B-A3B/qwen36-v026-dynamic-fbss-v9b-calibration-retry1-20260906",
+  "calibration_trace_sha256": "66c06afb199fc4a586809b8a9e5ec26c67aafff2579fa054b22b0a2cc9b25fc8",
+  "heldout_trace_sha256": "c8c611b2ae64c3339b51e6806e3691b3d364b4bd7746f4d54ea5bceb176c7259",
+  "calibration_grid_sha256": "855a3871ada0b73aedfa7ad1b71435f23a4389bffeebe6d98143d40ccddce4e1",
+  "calibration_profile_sha256": "6aa21835c6cbffbe916dde75946d5b7e4443f2d5a8de764373be20c0f9a05cbe",
+  "expanded_profile_sha256": "d3b726d438169928c27923cbe58dd5debfeff7ba203f9b1c11a7481b156a3f8a",
+  "fbss_decision_sha256": "dc072d01d709feaa7a43a07d24cc32709566cf3074f393379e65325ea071a31c",
+  "additional_candidate_validation_runs": 0,
+  "heldout_status": "identity-disjoint and unseen before freeze",
+  "next_step": "evaluate this frozen policy once without feedback",
+  "plugin_commit": "1f137721c61313c6a494e89557457b30f0b4c2cb"
+}

@@ -1,0 +1,102 @@
+{
+  "schema_version": 1,
+  "selection_split": "calibration",
+  "topologies": [
+    {
+      "id": "2a2e",
+      "attention_gpus": [
+        0,
+        1
+      ],
+      "expert_gpus": [
+        2,
+        3
+      ],
+      "attention_dp": 2,
+      "expert_dp": 1,
+      "attention_tp": 1,
+      "expert_ep": 2,
+      "expert_tp": 1
+    },
+    {
+      "id": "2a1e",
+      "attention_gpus": [
+        0,
+        1
+      ],
+      "expert_gpus": [
+        2
+      ],
+      "attention_dp": 2,
+      "expert_dp": 1,
+      "attention_tp": 1,
+      "expert_ep": 1,
+      "expert_tp": 1
+    },
+    {
+      "id": "1a2e",
+      "attention_gpus": [
+        0
+      ],
+      "expert_gpus": [
+        1,
+        2
+      ],
+      "attention_dp": 1,
+      "expert_dp": 1,
+      "attention_tp": 1,
+      "expert_ep": 2,
+      "expert_tp": 1
+    },
+    {
+      "id": "1a1e",
+      "attention_gpus": [
+        0
+      ],
+      "expert_gpus": [
+        1
+      ],
+      "attention_dp": 1,
+      "expert_dp": 1,
+      "attention_tp": 1,
+      "expert_ep": 1,
+      "expert_tp": 1
+    }
+  ],
+  "attention_frequencies_mhz": [
+    1050,
+    1170,
+    1290,
+    1350,
+    1410
+  ],
+  "expert_frequencies_mhz": [
+    1050,
+    1170,
+    1290,
+    1350,
+    1410
+  ],
+  "attention_power_caps_w": [
+    200,
+    250,
+    300,
+    350,
+    400
+  ],
+  "expert_power_caps_w": [
+    200,
+    250,
+    300,
+    350,
+    400
+  ],
+  "microbatches": [
+    1,
+    2,
+    4
+  ],
+  "enumerate_parallelism": true,
+  "execution_mode": "eager",
+  "description": "Enumeration hypotheses, not a claim that all configurations execute."
+}

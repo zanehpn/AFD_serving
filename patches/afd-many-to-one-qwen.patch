@@ -1,0 +1,462 @@
+From 47320c6beeb0da11d79ae0b93a16c78c0a94ccd2 Mon Sep 17 00:00:00 2001
+From: AFD contributors <contributors@example.invalid>
+Date: Mon, 7 Sep 2026 11:48:40 +0000
+Subject: [PATCH 1/2] Preserve all Attention peer identities and token spans
+ for many-to-one Expert tracing
+
+---
+ afd_plugin/connectors/gpu/composition.py      | 41 +++++++++++++++++
+ afd_plugin/connectors/gpu/p2p.py              | 45 +++++++++---------
+ .../test_many_to_one_composition.py           | 46 +++++++++++++++++++
+ tests/unit/connectors/test_p2p_connector.py   | 29 ++++++++++++
+ 4 files changed, 139 insertions(+), 22 deletions(-)
+ create mode 100644 afd_plugin/connectors/gpu/composition.py
+ create mode 100644 tests/unit/connectors/test_many_to_one_composition.py
+
+diff --git a/afd_plugin/connectors/gpu/composition.py b/afd_plugin/connectors/gpu/composition.py
+new file mode 100644
+index 0000000..9fb9651
+--- /dev/null
++++ b/afd_plugin/connectors/gpu/composition.py
+@@ -0,0 +1,41 @@
++"""Merge actual peer control messages for a concatenated Expert microbatch."""
++from dataclasses import replace
++from afd_plugin.connectors.metadata import AFDControlPayload
++
++
++def merge_peer_payloads(payloads, expected_sources):
++    if not payloads or len(payloads) != len(expected_sources):
++        raise ValueError("Missing Attention control payload")
++    if [p.source_rank for p in payloads] != list(expected_sources):
++        raise ValueError("Attention control source/order mismatch")
++    first = payloads[0]
++    offsets = {stage: 0 for stage in first.dp_metadata_list}
++    spans = []
++    for payload in payloads:
++        if (payload.transaction_id != first.transaction_id
++                or payload.is_warmup != first.is_warmup
++                or payload.is_graph_capturing != first.is_graph_capturing
++                or payload.dp_metadata_list.keys() != first.dp_metadata_list.keys()):
++            raise ValueError("Attention peers disagree on transaction or stages")
++        for stage, metadata in payload.dp_metadata_list.items():
++            counts = metadata.num_tokens_across_dp_cpu.tolist()
++            reference = first.dp_metadata_list[stage]
++            if (counts != reference.num_tokens_across_dp_cpu.tolist()
++                    or int(metadata.max_tokens_across_dp_cpu) != int(reference.max_tokens_across_dp_cpu)):
++                raise ValueError("Attention peers disagree on DP token counts")
++            if not 0 <= payload.source_rank < len(counts):
++                raise ValueError("Control source has no DP token count")
++            width = max(1, int(counts[payload.source_rank]))
++            stage_spans = [s for s in payload.request_token_spans if s.stage_idx == stage]
++            end = 0
++            for span in sorted(stage_spans, key=lambda s: s.token_offset):
++                if span.token_offset < end or span.token_offset + span.token_count > width:
++                    raise ValueError("Request spans overlap or exceed peer wire tensor")
++                end = span.token_offset + span.token_count
++                spans.append(replace(span, token_offset=span.token_offset + offsets[stage]))
++            offsets[stage] += width
++        if any(s.stage_idx not in offsets for s in payload.request_token_spans):
++            raise ValueError("Request span has unknown microbatch stage")
++    phases = {s.phase for s in spans}
++    phase = next(iter(phases)) if len(phases) == 1 else ("mixed" if phases else "unknown")
++    return replace(first, phase=phase, request_token_spans=spans)
+diff --git a/afd_plugin/connectors/gpu/p2p.py b/afd_plugin/connectors/gpu/p2p.py
+index 425d1a3..acb8a8d 100644
+--- a/afd_plugin/connectors/gpu/p2p.py
++++ b/afd_plugin/connectors/gpu/p2p.py
+@@ -89,6 +89,7 @@ from afd_plugin.connectors.metadata import (
+     recv_control_payload,
+     send_control_payload,
+ )
++from afd_plugin.connectors.gpu.composition import merge_peer_payloads
+ from afd_plugin.distributed import (
+     DefaultProcessGroupSwitcher,
+     build_rank_mapping,
+@@ -179,13 +180,14 @@ class P2pNcclAFDConnector(AFDConnectorBase):
+         self._initialized = False
+         self.mapping = build_rank_mapping(afd_config, role_rank)
+         self.world_rank = self.mapping.world_rank
+-        self.p2p_rank = self.mapping.p2p_rank
++        self.p2p_rank = self.world_rank
+         self.attn_size = self.mapping.attention_size
+         self.ffn_size = self.mapping.ffn_size
+         self.min_size = self.mapping.min_size
+         self.ratio = self.mapping.ratio
+         self.group_size = len(self.mapping.subgroup_ranks)
+-        self.dst_list = list(self.mapping.dp_metadata_destinations)
++        self.dst_list = ([self.mapping.subgroup_index]
++                         if afd_config.role == "attention" else [])
+         text_config = vllm_config.model_config.hf_text_config
+         self.num_hidden_layers = int(text_config.num_hidden_layers)
+         # Dense-model connector tests do not define MoE routing fields; the
+@@ -255,9 +257,8 @@ class P2pNcclAFDConnector(AFDConnectorBase):
+            ``port + subgroup_index + 1`` and two ``PyNcclCommunicator``
+            instances over it (Attention-to-FFN and FFN-to-Attention), each
+            registered for use by the P2P custom ops.
+-        3. On ranks that participate in the DP metadata control plane, joins
+-           the ``p2p`` process group that ``control_plane`` uses to
+-           distribute per-stage token counts.
++        3. All ranks join the ``p2p`` control group so every Attention peer
++           can transmit its own per-stage request composition to Expert.
+ 
+         Idempotent: returns immediately if already initialized.
+         """
+@@ -295,11 +296,11 @@ class P2pNcclAFDConnector(AFDConnectorBase):
+             )
+             self.e2a_comm_id = _register_comm(self.e2a_pynccl)
+ 
+-        if self.mapping.participates_in_dp_metadata_group:
++        if self.p2p_pg is None:
+             self.p2p_pg = init_afd_process_group(
+                 backend="nccl",
+                 init_method=f"tcp://{self.afd_config.host}:{self.afd_config.port}",
+-                world_size=self.ffn_size + self.min_size,
++                world_size=self.ffn_size + self.attn_size,
+                 rank=self.p2p_rank,
+                 group_name="p2p",
+                 timeout=timedelta(minutes=30),
+@@ -558,7 +559,7 @@ class P2pNcclAFDConnector(AFDConnectorBase):
+         transaction_id, phase, request_token_spans = _control_stage_composition(
+             self.latest_control_payload,
+             stage_idx=ubatch_idx,
+-            exact_mapping=self.ratio == 1,
++            exact_mapping=True,  # recv_dp_metadata_list validated every peer.
+         )
+         metadata = AFDTransferMetadata.create_ffn_metadata(
+             layer_idx=0,
+@@ -852,9 +853,8 @@ class P2pNcclAFDControlPlane(AFDControlPlane):
+     ) -> None:
+         """Send the DP metadata payload from Attention to the FFN ranks.
+ 
+-        No-ops on ranks that are not designated DP metadata senders (only the
+-        first ``min_size`` Attention ranks in the ``p2p`` group transmit) or
+-        that do not participate in the DP metadata group at all.
++        Every Attention rank sends its actual composition to its mapped FFN
++        rank. FFN receives in wire concatenation order before model execution.
+ 
+         Args:
+             payload: DP metadata payload to distribute to the FFN-side
+@@ -863,11 +863,7 @@ class P2pNcclAFDControlPlane(AFDControlPlane):
+         connector = self.connector
+         if connector.p2p_pg is None:
+             return
+-        if not (
+-            connector.ffn_size
+-            <= connector.world_rank
+-            < connector.ffn_size + connector.min_size
+-        ):
++        if connector.afd_config.role != "attention":
+             return
+         # NCCL transport requires the wire tensors to live on the CUDA device.
+         device = torch.device(f"cuda:{connector.local_rank}")
+@@ -895,13 +891,18 @@ class P2pNcclAFDControlPlane(AFDControlPlane):
+         if connector.p2p_pg is None:
+             raise RuntimeError("P2P DP metadata process group is not initialized")
+ 
+-        src = connector.p2p_rank % connector.min_size + connector.ffn_size
++        sources = list(range(connector.mapping.subgroup_index * connector.ratio,
++                             (connector.mapping.subgroup_index + 1) * connector.ratio))
+         device = torch.device(f"cuda:{connector.local_rank}")
+-        return recv_control_payload(
+-            src=src,
+-            group=connector.p2p_pg,
+-            device=device,
+-        )
++        payloads = [recv_control_payload(src=connector.ffn_size + source,
++                                        group=connector.p2p_pg, device=device)
++                    for source in sources]
++        if connector.ratio == 1:
++            return payloads[0]
++        # Every peer sends its own scheduler composition. Fail closed on a
++        # transaction mismatch instead of assigning one peer's ID to another.
++        return merge_peer_payloads(payloads, sources)
++
+ 
+ 
+ def _num_tokens_for_attention_rank(
+diff --git a/tests/unit/connectors/test_many_to_one_composition.py b/tests/unit/connectors/test_many_to_one_composition.py
+new file mode 100644
+index 0000000..437b10e
+--- /dev/null
++++ b/tests/unit/connectors/test_many_to_one_composition.py
+@@ -0,0 +1,46 @@
++from dataclasses import replace
++import pytest
++from afd_plugin.connectors.metadata import AFDControlPayload, AFDDPMetadata, AFDRequestTokenSpan, encode_control_payload, decode_control_payload
++from afd_plugin.connectors.gpu.composition import merge_peer_payloads
++
++
++def payload(rank, tx='afd-7', counts=(3, 5), spans=None):
++    return AFDControlPayload(dp_metadata_list={0: AFDDPMetadata(list(counts)), 1: AFDDPMetadata([1, 2])},
++        is_graph_capturing=False, is_warmup=False, source_rank=rank, transaction_id=tx, phase='mixed', request_token_spans=spans or [])
++
++
++def span(request, count, stage=0, phase='prefill'):
++    return AFDRequestTokenSpan(request, 0, count, 0, 10, phase, stage_idx=stage)
++
++
++def test_wire_roundtrip_merges_real_peer_composition_in_concatenation_order():
++    a=payload(0,spans=[span('a',3),span('a-dec',1,1,'decode')])
++    b=payload(1,spans=[span('b',5),span('b-dec',2,1,'decode')])
++    wire=[decode_control_payload(encode_control_payload(p)) for p in (a,b)]
++    merged=merge_peer_payloads(wire,[0,1])
++    assert merged.transaction_id=='afd-7'
++    assert merged.phase=='mixed'
++    assert [(s.request_id,s.stage_idx,s.token_offset,s.token_count) for s in merged.request_token_spans]==[
++        ('a',0,0,3),('a-dec',1,0,1),('b',0,3,5),('b-dec',1,1,2)]
++    assert b.request_token_spans[0].token_offset==0
++
++
++def test_idle_peer_padding_offsets_are_not_counted_as_requests():
++    a=payload(0,counts=(0,5))
++    b=payload(1,counts=(0,5),spans=[span('b',5)])
++    merged=merge_peer_payloads([a,b],[0,1])
++    assert [(s.token_offset,s.token_count) for s in merged.request_token_spans]==[(1,5)]
++
++
++@pytest.mark.parametrize('kind',['transaction','source','counts','stages','warmup','missing','overflow','overlap'])
++def test_mismatched_or_ambiguous_composition_fails_closed(kind):
++    a,b=payload(0),payload(1,spans=[span('b',5)])
++    if kind=='transaction': b.transaction_id='afd-8'
++    if kind=='source': b.source_rank=0
++    if kind=='counts': b.dp_metadata_list[0]=AFDDPMetadata([3,6])
++    if kind=='stages': b.dp_metadata_list.pop(1)
++    if kind=='warmup': b.is_warmup=True
++    if kind=='overflow': b.request_token_spans=[span('b',6)]
++    if kind=='overlap': b.request_token_spans=[span('b',5),span('c',1)]
++    with pytest.raises(ValueError):
++        merge_peer_payloads([a] if kind=='missing' else [a,b],[0,1])
+diff --git a/tests/unit/connectors/test_p2p_connector.py b/tests/unit/connectors/test_p2p_connector.py
+index 39fb1be..f2a91ac 100644
+--- a/tests/unit/connectors/test_p2p_connector.py
++++ b/tests/unit/connectors/test_p2p_connector.py
+@@ -567,3 +567,32 @@ def test_p2p_recv_single_rank_requires_ref_tensor():
+             connector.e2a_comm_id,
+             tensor_metadata,
+         )
++
++
++def test_2a1e_second_attention_sends_and_expert_receives_both_peers(monkeypatch):
++    module = importlib.import_module('afd_plugin.connectors.gpu.p2p')
++    def connector(role, rank):
++        return module.P2pNcclAFDConnector(rank, 0,
++            _fake_vllm_config(data_parallel_size=2 if role=='attention' else 1, data_parallel_rank=rank),
++            AFDConfig(role=role,connector='P2pNcclAFDConnector',num_attention_ranks=2,num_ffn_ranks=1),
++            role_rank=rank)
++    a1=connector('attention',1)
++    assert a1.p2p_rank==2
++    a1.p2p_pg=object()
++    payloads=[AFDControlPayload(dp_metadata_list={0:AFDDPMetadata([3,5])},
++        is_graph_capturing=False,is_warmup=False,source_rank=i,transaction_id='afd-7') for i in range(2)]
++    sent=[]
++    monkeypatch.setattr(module,'send_control_payload',lambda payload,**kwargs:sent.append((payload,kwargs)))
++    a1.control_plane.send_dp_metadata_list(payloads[1])
++    assert sent[0][0] is payloads[1]
++    assert sent[0][1]['dst']==[0]
++    expert=connector('ffn',0)
++    expert.p2p_pg=object()
++    received=[]
++    def receive(**kwargs):
++        received.append(kwargs['src'])
++        return payloads[kwargs['src']-1]
++    monkeypatch.setattr(module,'recv_control_payload',receive)
++    merged=expert.control_plane.recv_dp_metadata_list()
++    assert received==[1,2]
++    assert merged.transaction_id=='afd-7'
+
+From 240e6887f047149ddf322912f4830e4b000573f7 Mon Sep 17 00:00:00 2001
+From: AFD contributors <contributors@example.invalid>
+Date: Mon, 7 Sep 2026 12:17:42 +0000
+Subject: [PATCH 2/2] Fix idle DP causal identity at the wire forward boundary
+
+---
+ afd_plugin/connectors/gpu/composition.py      |  8 +-
+ afd_plugin/connectors/metadata.py             |  3 +-
+ .../v1/worker/attention_model_runner.py       | 28 +++++--
+ .../v1/worker/test_attention_model_runner.py  | 83 +++++++++++++++++++
+ 4 files changed, 114 insertions(+), 8 deletions(-)
+
+diff --git a/afd_plugin/connectors/gpu/composition.py b/afd_plugin/connectors/gpu/composition.py
+index 9fb9651..534054b 100644
+--- a/afd_plugin/connectors/gpu/composition.py
++++ b/afd_plugin/connectors/gpu/composition.py
+@@ -16,7 +16,13 @@ def merge_peer_payloads(payloads, expected_sources):
+                 or payload.is_warmup != first.is_warmup
+                 or payload.is_graph_capturing != first.is_graph_capturing
+                 or payload.dp_metadata_list.keys() != first.dp_metadata_list.keys()):
+-            raise ValueError("Attention peers disagree on transaction or stages")
++            details = [
++                {"source_rank": p.source_rank, "transaction_id": p.transaction_id,
++                 "warmup": p.is_warmup, "graph": p.is_graph_capturing,
++                 "stages": sorted(p.dp_metadata_list)}
++                for p in payloads
++            ]
++            raise ValueError(f"Attention peers disagree on transaction or stages: {details}")
+         for stage, metadata in payload.dp_metadata_list.items():
+             counts = metadata.num_tokens_across_dp_cpu.tolist()
+             reference = first.dp_metadata_list[stage]
+diff --git a/afd_plugin/connectors/metadata.py b/afd_plugin/connectors/metadata.py
+index a8d8038..87f66c0 100644
+--- a/afd_plugin/connectors/metadata.py
++++ b/afd_plugin/connectors/metadata.py
+@@ -124,7 +124,8 @@ class AFDControlPayload:
+             separate from graph capture because warmup may prepare state without
+             representing a real serving step.
+         source_rank: Attention data-parallel rank that produced the payload.
+-        transaction_id: Sender-local serving-step identity.
++        transaction_id: Serving-step identity. GPU runners identify the ordered
++            control/data-plane forward shared by synchronized Attention peers.
+         phase: Aggregate phase of the scheduler step.
+         request_token_spans: Tensor-aligned request composition, including DBO
+             stage assignment, carried to the Expert side for observation.
+diff --git a/afd_plugin/v1/worker/attention_model_runner.py b/afd_plugin/v1/worker/attention_model_runner.py
+index cca0eed..26fa2a2 100644
+--- a/afd_plugin/v1/worker/attention_model_runner.py
++++ b/afd_plugin/v1/worker/attention_model_runner.py
+@@ -121,7 +121,14 @@ class AFDAttentionModelRunner(GPUModelRunner):
+             connector=self.connector,
+             tokens_lens=tokens_lens,
+             num_stages=num_stages,
+-            transaction_id=self._next_afd_transaction_id(),
++            transaction_id=(
++                getattr(
++                    getattr(self, "_afd_pending_metadata", None),
++                    "transaction_id", None,
++                )
++                if bool(getattr(self, "_afd_suppress_metadata_send", False))
++                else None
++            ),
+             tokens_unpadded_lens=tokens_unpadded_lens,
+             phase=phase,
+             request_token_spans=list(request_token_spans or []),
+@@ -149,6 +156,14 @@ class AFDAttentionModelRunner(GPUModelRunner):
+         is_warmup = self._is_warmup
+         is_graph_capturing = bool(getattr(self, "_afd_is_graph_capturing", False))
+         pending_metadata = self._afd_pending_metadata
++        # DP peers execute the same ordered wire forwards, but can build
++        # metadata a different number of times (real versus idle batches).
++        # Identify the actual control/data-plane operation, not a local
++        # metadata construction. Mutate the same object installed on the
++        # Attention context so all four trace stages carry this identity.
++        transaction_id = self._next_afd_transaction_id()
++        if pending_metadata is not None:
++            pending_metadata.transaction_id = transaction_id
+         request_token_spans = (
+             _stage_request_token_spans(
+                 pending_metadata.request_token_spans,
+@@ -162,11 +177,7 @@ class AFDAttentionModelRunner(GPUModelRunner):
+             is_graph_capturing=is_graph_capturing,
+             is_warmup=is_warmup,
+             source_rank=int(self.connector.role_rank),
+-            transaction_id=(
+-                pending_metadata.transaction_id
+-                if pending_metadata is not None
+-                else None
+-            ),
++            transaction_id=transaction_id,
+             phase=(
+                 pending_metadata.phase
+                 if pending_metadata is not None
+@@ -549,6 +560,11 @@ class AFDAttentionModelRunner(GPUModelRunner):
+             False,
+         )
+         self._afd_is_graph_capturing = is_graph_capturing
++        # An idle DP forward must never inherit a preceding request's spans.
++        # A non-ubatched graph capture is the one exception: its control
++        # payload and metadata were explicitly published before capture.
++        if not bool(getattr(self, "_afd_suppress_metadata_send", False)):
++            self._afd_pending_metadata = None
+         try:
+             with use_afd_metadata_provider(self):
+                 return super()._dummy_run(
+diff --git a/tests/unit/v1/worker/test_attention_model_runner.py b/tests/unit/v1/worker/test_attention_model_runner.py
+index 55d6ce0..ea1c141 100644
+--- a/tests/unit/v1/worker/test_attention_model_runner.py
++++ b/tests/unit/v1/worker/test_attention_model_runner.py
+@@ -1136,3 +1136,86 @@ def test_attention_runner_load_model_initializes_connector_after_weights(
+     expected.append("connector_init")
+     assert events == expected
+     assert connector.is_initialized is True
++
++
++def _wire_runner(rank=0):
++    runner = object.__new__(AFDAttentionModelRunner)
++    runner.connector = _RecordingConnector()
++    runner.connector.role_rank = rank
++    runner.vllm_config = SimpleNamespace(parallel_config=_parallel_config())
++    runner._is_warmup = False
++    runner._afd_is_graph_capturing = False
++    runner._afd_suppress_metadata_send = False
++    runner._afd_pending_metadata = None
++    runner._afd_transaction_counter = 0
++    return runner
++
++
++def test_wire_identity_counts_published_forwards_not_metadata_builds():
++    a, b = _wire_runner(0), _wire_runner(1)
++    for step in range(4):
++        # Attention peers may take different metadata-building paths.
++        for _ in range(step + 1):
++            a._afd_pending_metadata = a._build_afd_metadata(None, 1)
++        b._afd_pending_metadata = b._build_afd_metadata(None, 1)
++        assert a._afd_pending_metadata.transaction_id is None
++        for runner in (a, b):
++            runner._send_dp_metadata(_dp_metadata([1, 1]), None)
++            assert runner._afd_pending_metadata.transaction_id == f"afd-{step}"
++            assert runner.connector.control_payloads[-1].transaction_id == f"afd-{step}"
++    assert a._afd_transaction_counter == b._afd_transaction_counter == 4
++
++
++def test_idle_dummy_discards_old_request_composition_and_advances_wire(monkeypatch):
++    runner = _wire_runner()
++    runner._afd_pending_metadata = runner._build_afd_metadata(
++        None, 1, phase="decode",
++        request_token_spans=[AFDRequestTokenSpan("old-request", 0, 1, 9, 4, "decode")],
++    )
++    runner._send_dp_metadata(_dp_metadata([1]), None)
++    previous = runner._afd_pending_metadata
++    fake_context, _ = _install_fake_vllm_forward_context(monkeypatch)
++    observed = []
++
++    def dummy(self, *args, **kwargs):
++        context = fake_context.create_forward_context()
++        observed.append(context.additional_kwargs["afd_metadata"])
++        return None, None
++
++    monkeypatch.setattr(GPUModelRunner, "_dummy_run", dummy)
++    runner._dummy_run(1, uniform_decode=True)
++    runner._dummy_run(1, uniform_decode=True)
++    assert [m.transaction_id for m in observed] == ["afd-1", "afd-2"]
++    assert all(m.request_token_spans == [] and m.phase == "unknown" for m in observed)
++    assert all(p.request_token_spans == [] for p in runner.connector.control_payloads[1:])
++    assert runner._afd_pending_metadata is previous
++    assert previous.transaction_id == "afd-0"
++    runner._afd_pending_metadata = runner._build_afd_metadata(
++        None, 1, phase="prefill",
++        request_token_spans=[AFDRequestTokenSpan("new-request", 0, 1, 0, 4, "prefill")],
++    )
++    runner._send_dp_metadata(_dp_metadata([1]), None)
++    assert runner.connector.control_payloads[-1].transaction_id == "afd-3"
++    assert runner.connector.control_payloads[-1].request_token_spans[0].request_id == "new-request"
++
++
++def test_capture_dummy_keeps_prepublished_identity_without_extra_wire_send(monkeypatch):
++    runner = _wire_runner()
++    runner._afd_pending_metadata = runner._build_afd_metadata(None, 1)
++    runner._send_dp_metadata(_dp_metadata([1]), None)
++    runner._afd_suppress_metadata_send = True
++    fake_context, _ = _install_fake_vllm_forward_context(monkeypatch)
++    observed = []
++
++    def dummy(self, *args, **kwargs):
++        # Native force-attention capture may rebuild metadata after prepublish.
++        self._afd_pending_metadata = self._build_afd_metadata(None, 1)
++        context = fake_context.create_forward_context()
++        observed.append(context.additional_kwargs["afd_metadata"])
++        return None, None
++
++    monkeypatch.setattr(GPUModelRunner, "_dummy_run", dummy)
++    runner._dummy_run(1, is_graph_capturing=True)
++    assert observed[0].transaction_id == "afd-0"
++    assert len(runner.connector.control_payloads) == 1
++    assert runner._afd_transaction_counter == 1

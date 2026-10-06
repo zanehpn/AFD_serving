@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "model_id": "Qwen3.6-35B-A3B",
+  "adapter": "v026_launch_pair",
+  "gpu_budget": 4,
+  "allowed_gpus": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "memory_clock_mhz": 1593,
+  "execution_modes": [
+    "eager",
+    "full_decode_only"
+  ],
+  "divisibility": {
+    "expert_ep": 256
+  },
+  "scope": "Template for a new host. No execution evidence is shipped. Populate structures only after matching model/backend/GPU execution validation.",
+  "structures": []
+}

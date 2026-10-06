@@ -1,0 +1,70 @@
+{
+  "selection_split": "calibration",
+  "mode": "physical",
+  "model_id": "Qwen3.6-35B-A3B",
+  "specification": "space.json",
+  "hardware": "hardware.json",
+  "runtime": "runtime.json",
+  "profile": "profile.json",
+  "calibration_trace": "/REPLACE/calibration.jsonl",
+  "heldout_trace": "/REPLACE/heldout.jsonl",
+  "profile_trace_files": [],
+  "context_files": {
+    "model_config": "/REPLACE/model/config.json",
+    "plugin_source": "/REPLACE/plugin-source-manifest.json",
+    "launcher": "/REPLACE/measurement_executor.py",
+    "measurement_protocol": "/REPLACE/protocol.json"
+  },
+  "workload": {
+    "arrival_rate_rps": 1,
+    "offered_utilization": 1,
+    "prefill_tokens_per_step": null,
+    "decode_tokens_per_step": null
+  },
+  "reference_configuration": {
+    "attention_gpus": [
+      0,
+      1
+    ],
+    "expert_gpus": [
+      2,
+      3
+    ],
+    "attention_dp": 2,
+    "attention_tp": 1,
+    "expert_dp": 1,
+    "expert_ep": 2,
+    "expert_tp": 1,
+    "attention_mhz": 1410,
+    "expert_mhz": 1410,
+    "attention_power_w": 400,
+    "expert_power_w": 400,
+    "microbatches": 2,
+    "execution_mode": "eager"
+  },
+  "limits": {
+    "ttft_ms": null,
+    "tpot_ms": null,
+    "min_output_tps": null
+  },
+  "default_energy_j": null,
+  "setup_cost": {
+    "evaluations": null,
+    "gpu_hours": null,
+    "wall_seconds": null,
+    "tuning_energy_j": null
+  },
+  "budget": {
+    "evaluations": 32,
+    "gpu_hours": 8
+  },
+  "require_four_stage": true,
+  "allow_structure_probes": false,
+  "bo": {
+    "seed": 0,
+    "evaluation_seconds": 300,
+    "structure_switch_seconds": 180,
+    "knob_switch_seconds": 2,
+    "max_repeats": 2
+  }
+}

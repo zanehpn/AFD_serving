@@ -1,0 +1,93 @@
+diff --git a/afd_plugin/observability.py b/afd_plugin/observability.py
+index c01cad1..cdb087c 100644
+--- a/afd_plugin/observability.py
++++ b/afd_plugin/observability.py
+@@ -22,8 +22,8 @@ if TYPE_CHECKING:
+
+
+ def summarize_attention_workload(
+-    spans: list[AFDRequestTokenSpan], stage_idx: int,
+-) -> dict[str, int | str] | None:
++    spans: list[AFDRequestTokenSpan], stage_idx: int, *, include_decode_spans: bool = False,
++) -> dict[str, object] | None:
+     """Summarize exact real-token context work without reading GPU tensors.
+
+     Causal query/key pairs are a logical work feature, not HBM traffic. A GPU
+@@ -34,6 +34,7 @@ def summarize_attention_workload(
+     if not selected:
+         return None
+     prefill = decode = prefill_context = decode_context = 0
++    decode_spans: list[dict[str, object]] = []
+     request_ends: dict[str, int] = {}
+     occupied: list[tuple[int, int]] = []
+     for span in selected:
+@@ -43,6 +44,9 @@ def summarize_attention_workload(
+         occupied.append((span.token_offset, span.token_offset + count))
+         p = min(count, max(span.prompt_tokens - position, 0))
+         d = count - p
++        if include_decode_spans and d:
++            decode_spans.append({"request_id": span.request_id, "prompt_tokens": span.prompt_tokens,
++                                 "first_token_position": position + p, "token_count": d})
+         prefill += p
+         decode += d
+         prefill_context += p * (position + 1) + p * (p - 1) // 2
+@@ -56,7 +60,7 @@ def summarize_attention_workload(
+             "kv_sequence_tokens": sum(request_ends.values()),
+             "prefill_tokens": prefill, "decode_tokens": decode,
+             "prefill_context_tokens": prefill_context,
+-            "decode_context_tokens": decode_context}
++            "decode_context_tokens": decode_context, "decode_request_spans": decode_spans}
+
+ def _cuda_graph_capture_active() -> bool:
+     """Return whether telemetry is being invoked by a CUDA graph dummy run.
+@@ -177,7 +181,8 @@ class StageTracer:
+         if _cuda_graph_capture_active():
+             yield
+             return
+-        attention_workload = (summarize_attention_workload(request_token_spans, stage_idx or 0)
++        attention_workload = (summarize_attention_workload(request_token_spans, stage_idx or 0,
++                                                               include_decode_spans=layer_idx == 0)
+                               if request_token_spans is not None else None)
+         use_cuda_events = self.async_cuda_events and torch.cuda.is_available()
+         device = torch.cuda.current_device() if use_cuda_events else -1
+@@ -215,6 +220,7 @@ class StageTracer:
+                 "bytes": bytes_count,
+                 "phase": phase,
+                 "transaction_id": transaction_id,
++                "decode_request_spans": attention_workload.pop("decode_request_spans", []) if attention_workload else [],
+                 "attention_workload": attention_workload,
+                 "timing_source": "cuda_events" if use_cuda_events else ("cuda_synchronized_host" if self.synchronize_cuda else "host"),
+                 "pid": os.getpid(),
+diff --git a/tests/unit/test_attention_workload_trace.py b/tests/unit/test_attention_workload_trace.py
+index 33bcbb3..746227a 100644
+--- a/tests/unit/test_attention_workload_trace.py
++++ b/tests/unit/test_attention_workload_trace.py
+@@ -78,3 +78,28 @@ def test_disabled_tracer_does_not_process_context(monkeypatch):
+     spans = [span("a", 0, 2, 20, 10), span("b", 1, 2, 30, 10)]
+     with tracer.record("attention_compute", request_token_spans=spans):
+         pass
++
++
++def test_decode_lifetime_spans_are_opt_in_and_exclude_prefill():
++    spans = [span("r", 0, 4, 8, 10)]
++    assert summarize_attention_workload(spans, 0)["decode_request_spans"] == []
++    result = summarize_attention_workload(spans, 0, include_decode_spans=True)
++    assert result["decode_request_spans"] == [{"request_id": "r", "prompt_tokens": 10,
++                                              "first_token_position": 10, "token_count": 2}]
++
++
++def test_tracer_emits_lifetime_detail_only_at_first_layer(tmp_path, monkeypatch):
++    path = tmp_path / "trace.jsonl"
++    monkeypatch.setenv("ECODEP_STAGE_TRACE", str(path))
++    monkeypatch.setenv("ECODEP_TRACE_CUDA_EVENTS", "0")
++    monkeypatch.delenv("ECODEP_TRACE_SYNC_CUDA", raising=False)
++    tracer = StageTracer(role="attention", rank=0)
++    for layer in (0, 1):
++        with tracer.record("attention_compute", transaction_id="real", stage_idx=0, layer_idx=layer,
++                           tokens=1, prefill_tokens=0, decode_tokens=1,
++                           request_token_spans=[span("r", 0, 1, 10, 10)]):
++            pass
++    first, second = [json.loads(line) for line in path.read_text().splitlines()]
++    assert first["decode_request_spans"][0]["first_token_position"] == 10
++    assert second["decode_request_spans"] == []
++    assert first["attention_workload"] == second["attention_workload"]

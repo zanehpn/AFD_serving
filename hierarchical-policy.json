@@ -1,0 +1,13 @@
+{
+  "method": "bo",
+  "use_model_prior": true,
+  "model_screening": true,
+  "cost_aware": true,
+  "exploration_policy": "hierarchical_v3",
+  "structure_exploration_fraction": 0.3333333333333333,
+  "repeat_after_fraction": 0.75,
+  "repeat_boundary_margin": 0.01,
+  "initial_parameter_probes": 0,
+  "initial_joint_probes": 0,
+  "analytical_probe_every": 0
+}

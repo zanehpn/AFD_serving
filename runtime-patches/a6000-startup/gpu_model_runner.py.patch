@@ -1,0 +1,20 @@
+--- a/vllm/v1/worker/gpu_model_runner.py
++++ b/vllm/v1/worker/gpu_model_runner.py
+@@ -6420,6 +6420,17 @@
+                         for i, output in enumerate(dummy_encoder_outputs):
+                             self.encoder_cache[f"tmp_{i}"] = output
+ 
++        # A6000 AFD: initialize sampler CUDA modules and host-to-device
++        # tables before the model queues interdependent NCCL transfers.
++        if (get_pp_group().is_last_rank and not self.is_pooling_model
++                and self.vllm_config.additional_config.get("afd")):
++            sampler_hidden = torch.empty(
++                (self.max_num_reqs, self.model_config.get_hidden_size()),
++                dtype=self.dtype, device=self.device,
++            )
++            sampler_output = self._dummy_sampler_run(sampler_hidden)
++            self._sync_device()
++            del sampler_hidden, sampler_output
+         # Add `is_profile` here to pre-allocate communication buffers
+         hidden_states, last_hidden_states = self._dummy_run(
+             self.max_num_tokens, is_profile=True

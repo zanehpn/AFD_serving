@@ -1,0 +1,25 @@
+{
+  "selection_split": "calibration",
+  "entries": [
+    {
+      "position": 1,
+      "arm": "B2",
+      "repetition": 1,
+      "rates_rps": [
+        1,
+        2,
+        4
+      ]
+    },
+    {
+      "position": 2,
+      "arm": "causal-dvfs-v5-dynamic-ae",
+      "repetition": 1,
+      "rates_rps": [
+        1,
+        2,
+        4
+      ]
+    }
+  ]
+}

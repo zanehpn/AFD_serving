@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "vllm_version": "0.26.0",
+  "plugin_url": "https://github.com/vllm-project/afd-plugin.git",
+  "plugin_commit": "85e826ed8239dd9d8032375bb84a56116e24f0e0",
+  "plugin_entrypoint": "afd",
+  "source_modifications_allowed": false,
+  "requirements": "environment/native-requirements.lock.txt"
+}

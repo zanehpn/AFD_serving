@@ -1,0 +1,268 @@
+diff --git a/afd_plugin/connectors/gpu/composition.py b/afd_plugin/connectors/gpu/composition.py
+index 534054b..7bbf80f 100644
+--- a/afd_plugin/connectors/gpu/composition.py
++++ b/afd_plugin/connectors/gpu/composition.py
+@@ -3,7 +3,7 @@ from dataclasses import replace
+ from afd_plugin.connectors.metadata import AFDControlPayload
+ 
+ 
+-def merge_peer_payloads(payloads, expected_sources):
++def merge_peer_payloads(payloads, expected_sources, attention_size=None):
+     if not payloads or len(payloads) != len(expected_sources):
+         raise ValueError("Missing Attention control payload")
+     if [p.source_rank for p in payloads] != list(expected_sources):
+@@ -29,6 +29,11 @@ def merge_peer_payloads(payloads, expected_sources):
+             if (counts != reference.num_tokens_across_dp_cpu.tolist()
+                     or int(metadata.max_tokens_across_dp_cpu) != int(reference.max_tokens_across_dp_cpu)):
+                 raise ValueError("Attention peers disagree on DP token counts")
++            if attention_size is not None:
++                if not counts or attention_size % len(counts):
++                    raise ValueError('DP metadata cannot map to Attention TP ranks')
++                tp = attention_size // len(counts)
++                counts = [n for n in counts for _ in range(tp)]
+             if not 0 <= payload.source_rank < len(counts):
+                 raise ValueError("Control source has no DP token count")
+             width = max(1, int(counts[payload.source_rank]))
+diff --git a/afd_plugin/connectors/gpu/p2p.py b/afd_plugin/connectors/gpu/p2p.py
+index acb8a8d..2be4674 100644
+--- a/afd_plugin/connectors/gpu/p2p.py
++++ b/afd_plugin/connectors/gpu/p2p.py
+@@ -901,7 +901,7 @@ class P2pNcclAFDControlPlane(AFDControlPlane):
+             return payloads[0]
+         # Every peer sends its own scheduler composition. Fail closed on a
+         # transaction mismatch instead of assigning one peer's ID to another.
+-        return merge_peer_payloads(payloads, sources)
++        return merge_peer_payloads(payloads, sources, connector.attn_size)
+ 
+ 
+ 
+diff --git a/afd_plugin/observability.py b/afd_plugin/observability.py
+index cdb087c..ee70e6d 100644
+--- a/afd_plugin/observability.py
++++ b/afd_plugin/observability.py
+@@ -93,6 +93,10 @@ class StageTracer:
+     """
+ 
+     def __init__(self, *, role: str, rank: int) -> None:
++        self.layout = json.loads(os.environ['ECODEP_EXPECTED_LAYOUT']) if os.environ.get('ECODEP_EXPECTED_LAYOUT') else None
++        self.local_role_rank = rank
++        if self.layout:
++            rank += int(self.layout[('expert' if role == 'ffn' else 'attention') + '_rank_offset'])
+         trace_template = os.environ.get("ECODEP_STAGE_TRACE")
+         self.enabled = bool(trace_template)
+         self.synchronize_cuda = os.environ.get("ECODEP_TRACE_SYNC_CUDA") == "1"
+@@ -219,7 +223,12 @@ class StageTracer:
+                 "decode_tokens": decode_tokens,
+                 "bytes": bytes_count,
+                 "phase": phase,
+-                "transaction_id": transaction_id,
++                "transaction_id": (f"replica-{self.layout['replica']}:{transaction_id}"
++                                   if self.layout and transaction_id else transaction_id),
++                "parallel_layout": ({'replica': self.layout['replica'],
++                                     'tp_size': self.layout[('expert' if self.role == 'ffn' else 'attention') + '_tp'],
++                                     'local_role_rank': self.local_role_rank}
++                                    if self.layout else None),
+                 "decode_request_spans": attention_workload.pop("decode_request_spans", []) if attention_workload else [],
+                 "attention_workload": attention_workload,
+                 "timing_source": "cuda_events" if use_cuda_events else ("cuda_synchronized_host" if self.synchronize_cuda else "host"),
+diff --git a/afd_plugin/runtime_layout.py b/afd_plugin/runtime_layout.py
+new file mode 100644
+index 0000000..852419a
+--- /dev/null
++++ b/afd_plugin/runtime_layout.py
+@@ -0,0 +1,48 @@
++"""Validate joint BO's layout against worker state after model construction."""
++import json
++import os
++from pathlib import Path
++
++
++def record_worker_layout(vllm_config, model, role, role_rank):
++    raw = os.environ.get('ECODEP_EXPECTED_LAYOUT')
++    if not raw:
++        return
++    expected = json.loads(raw)
++    parallel = vllm_config.parallel_config
++    expert = role == 'ffn'
++    key = 'expert' if expert else 'attention'
++    tp = expected[key + '_tp']
++    dp = expected['expert_native_dp' if expert else 'attention_dp']
++    m = expected['microbatches']
++    actual_m = int(parallel.num_ubatches) if parallel.use_ubatching else 1
++    actual = {'native_tp': int(parallel.tensor_parallel_size),
++              'native_dp': int(parallel.data_parallel_size),
++              'enable_expert_parallel': bool(parallel.enable_expert_parallel),
++              'microbatches': actual_m,
++              'dbo_decode_token_threshold': int(parallel.dbo_decode_token_threshold),
++              'dbo_prefill_token_threshold': int(parallel.dbo_prefill_token_threshold)}
++    wanted = {'native_tp': tp, 'native_dp': dp,
++              'enable_expert_parallel': expected['expert_enable_ep'] if expert else False,
++              'microbatches': m,
++              'dbo_decode_token_threshold': expected['dbo_decode_token_threshold'],
++              'dbo_prefill_token_threshold': expected['dbo_prefill_token_threshold']}
++    if actual != wanted:
++        raise RuntimeError(f'Worker layout differs from joint candidate: {actual} != {wanted}')
++    shards = []
++    if expert:
++        for module in model.modules():
++            config = getattr(module, 'moe_config', None)
++            if config is None:
++                continue
++            mapping = config.moe_parallel_config
++            shards.append({'tp': int(mapping.tp_size), 'ep': int(mapping.ep_size)})
++        wanted_shard = {'tp': tp, 'ep': dp if expected['expert_enable_ep'] else 1}
++        if not shards or any(item != wanted_shard for item in shards):
++            raise RuntimeError(f'Actual MoE shards differ from candidate: {shards} != {wanted_shard}')
++    rank = role_rank + expected[key + '_rank_offset']
++    result = {'role': role, 'rank': rank, 'local_role_rank': role_rank,
++              'replica': expected['replica'], 'actual': actual,
++              'expert_shards': shards, 'verified': True}
++    path = Path(expected['directory']) / f'worker-layout-{role}-{rank}.json'
++    path.write_text(json.dumps(result, indent=2) + '\n')
+diff --git a/afd_plugin/v1/worker/attention_model_runner.py b/afd_plugin/v1/worker/attention_model_runner.py
+index 26fa2a2..9203c1b 100644
+--- a/afd_plugin/v1/worker/attention_model_runner.py
++++ b/afd_plugin/v1/worker/attention_model_runner.py
+@@ -34,6 +34,7 @@ from afd_plugin.compat.profiler import (
+     stop_afd_gpu_profiler,
+ )
+ from afd_plugin.config import AFDConfig, parse_afd_config
++from afd_plugin.runtime_layout import record_worker_layout
+ from afd_plugin.connectors import (
+     AFDConnectorFactory,
+     AFDControlPayload,
+@@ -200,6 +201,9 @@ class AFDAttentionModelRunner(GPUModelRunner):
+         use_ubatching = bool(self.vllm_config.parallel_config.use_ubatching)
+         with _use_afd_ubatch_wrapper_during_load(use_ubatching):
+             super().load_model(load_dummy_weights)
++        # ### PATCH START: verify actual joint BO parallel/microbatch state.
++        record_worker_layout(self.vllm_config, self.model, 'attention', self.connector.role_rank)
++        # ### PATCH END: verify actual joint BO parallel/microbatch state.
+         if use_ubatching:
+             self._install_afd_ubatch_wrapper()
+         # Wrapper installation is local and non-blocking; the connector
+@@ -707,9 +711,11 @@ class AFDAttentionModelRunner(GPUModelRunner):
+ def fail_if_unsupported_ubatching(vllm_config: VllmConfig) -> None:
+     parallel_config = vllm_config.parallel_config
+     num_ubatches = int(parallel_config.num_ubatches)
+-    if bool(vllm_config.parallel_config.use_ubatching) and num_ubatches != 2:
++    if bool(vllm_config.parallel_config.use_ubatching) and (
++        num_ubatches < 2 or (num_ubatches != 2 and not vllm_config.model_config.enforce_eager)
++    ):
+         raise RuntimeError(
+-            "AFD ubatching currently supports exactly two ubatches; "
++            "AFD requires positive eager ubatches; CUDA graphs support exactly two; "
+             f"got num_ubatches={num_ubatches}",
+         )
+ 
+diff --git a/afd_plugin/v1/worker/ffn_model_runner.py b/afd_plugin/v1/worker/ffn_model_runner.py
+index 6763d54..8626499 100644
+--- a/afd_plugin/v1/worker/ffn_model_runner.py
++++ b/afd_plugin/v1/worker/ffn_model_runner.py
+@@ -3,6 +3,7 @@
+ """FFN-side model runner for AFD GPU execution."""
+ 
+ from __future__ import annotations
++from afd_plugin.runtime_layout import record_worker_layout
+ 
+ import logging
+ import os
+@@ -132,6 +133,7 @@ class GPUFFNModelRunner(LoRAModelRunnerMixin):
+                     self.model,
+                     model_config=self.model_config,
+                 )
++        record_worker_layout(self.vllm_config, self.model, 'ffn', self.connector.role_rank)
+         if self.connector.routing_sidecar.enabled:
+             install_sidecar = getattr(self.model, "install_routing_sidecar", None)
+             if not callable(install_sidecar):
+diff --git a/tests/unit/connectors/test_many_to_one_composition.py b/tests/unit/connectors/test_many_to_one_composition.py
+index 437b10e..c53f776 100644
+--- a/tests/unit/connectors/test_many_to_one_composition.py
++++ b/tests/unit/connectors/test_many_to_one_composition.py
+@@ -32,6 +32,13 @@ def test_idle_peer_padding_offsets_are_not_counted_as_requests():
+     assert [(s.token_offset,s.token_count) for s in merged.request_token_spans]==[(1,5)]
+ 
+ 
++def test_tp_peers_expand_dp_counts_before_concatenating():
++    a=payload(2,counts=(3,5),spans=[span('b',5)])
++    b=payload(3,counts=(3,5),spans=[span('b',5)])
++    merged=merge_peer_payloads([a,b],[2,3],attention_size=4)
++    assert [(s.token_offset,s.token_count) for s in merged.request_token_spans]==[(0,5),(5,5)]
++
++
+ @pytest.mark.parametrize('kind',['transaction','source','counts','stages','warmup','missing','overflow','overlap'])
+ def test_mismatched_or_ambiguous_composition_fails_closed(kind):
+     a,b=payload(0),payload(1,spans=[span('b',5)])
+diff --git a/tests/unit/test_joint_runtime_layout.py b/tests/unit/test_joint_runtime_layout.py
+new file mode 100644
+index 0000000..e44a8ed
+--- /dev/null
++++ b/tests/unit/test_joint_runtime_layout.py
+@@ -0,0 +1,67 @@
++"""CPU verification of actual MoE shard receipts, independent of vLLM import."""
++import importlib.util
++import json
++from pathlib import Path
++from types import SimpleNamespace as NS
++import pytest
++from dataclasses import dataclass
++import sys
++
++spec = importlib.util.spec_from_file_location('joint_runtime_layout', Path(__file__).resolve().parents[2]/'afd_plugin/runtime_layout.py')
++runtime = importlib.util.module_from_spec(spec)
++spec.loader.exec_module(runtime)
++
++
++@pytest.mark.parametrize('tp,ep,m', [(2,1,4),(1,2,1),(1,1,2)])
++def test_actual_shards_and_microbatch_are_required(tmp_path, monkeypatch, tp, ep, m):
++    expected = dict(expert_tp=tp, expert_native_dp=ep, expert_enable_ep=ep>1,
++                    expert_rank_offset=2, replica=1, microbatches=m, directory=str(tmp_path),
++                    dbo_decode_token_threshold=2, dbo_prefill_token_threshold=12)
++    monkeypatch.setenv('ECODEP_EXPECTED_LAYOUT',json.dumps(expected))
++    pc=NS(tensor_parallel_size=tp,data_parallel_size=ep,enable_expert_parallel=ep>1,
++          use_ubatching=m>1,num_ubatches=m,
++          dbo_decode_token_threshold=2,dbo_prefill_token_threshold=12)
++    shard=NS(tp_size=tp,ep_size=ep)
++    model=NS(modules=lambda:[NS(moe_config=NS(moe_parallel_config=shard))])
++    runtime.record_worker_layout(NS(parallel_config=pc),model,'ffn',0)
++    receipt=json.loads((tmp_path/'worker-layout-ffn-2.json').read_text())
++    assert receipt['actual']['microbatches']==m and receipt['replica']==1
++    pc.dbo_prefill_token_threshold=512
++    with pytest.raises(RuntimeError,match='Worker layout'):
++        runtime.record_worker_layout(NS(parallel_config=pc),model,'ffn',0)
++    pc.dbo_prefill_token_threshold=12
++    shard.tp_size=tp+1
++    with pytest.raises(RuntimeError,match='MoE shards'):
++        runtime.record_worker_layout(NS(parallel_config=pc),model,'ffn',0)
++    pc.tensor_parallel_size=tp+1
++    with pytest.raises(RuntimeError,match='Worker layout'):
++        runtime.record_worker_layout(NS(parallel_config=pc),model,'ffn',0)
++
++
++def test_peer_composition_expands_tp_metadata(monkeypatch):
++    # Only the annotation dependency is stubbed; execute the real merge code.
++    monkeypatch.setitem(sys.modules, 'afd_plugin.connectors.metadata', NS(AFDControlPayload=object))
++    path=Path(__file__).resolve().parents[2]/'afd_plugin/connectors/gpu/composition.py'
++    spec=importlib.util.spec_from_file_location('joint_composition',path)
++    module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
++    @dataclass
++    class Span:
++        stage_idx:int=0
++        token_offset:int=0
++        token_count:int=5
++        phase:str='decode'
++    @dataclass
++    class Payload:
++        source_rank:int
++        dp_metadata_list:dict
++        request_token_spans:list
++        transaction_id:str='transaction'
++        is_warmup:bool=False
++        is_graph_capturing:bool=False
++        phase:str='decode'
++    metadata={0:NS(num_tokens_across_dp_cpu=NS(tolist=lambda:[3,5]),max_tokens_across_dp_cpu=5)}
++    a,b=(Payload(i,metadata,[Span()]) for i in (2,3))
++    result=module.merge_peer_payloads([a,b],[2,3],4)
++    assert [s.token_offset for s in result.request_token_spans]==[0,5]
++    with pytest.raises(ValueError,match='cannot map'):
++        module.merge_peer_payloads([a,b],[2,3],3)

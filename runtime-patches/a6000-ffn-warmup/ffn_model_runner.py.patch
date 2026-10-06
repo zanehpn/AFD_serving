@@ -1,0 +1,38 @@
+--- a/afd_plugin/v1/worker/ffn_model_runner.py
++++ b/afd_plugin/v1/worker/ffn_model_runner.py
+@@ -103,7 +103,35 @@
+         return self.model
+ 
+     def initialize_afd_connector(self) -> None:
++        if not getattr(self, "_a6000_kernels_warmed", False):
++            self._warmup_local_ffn_kernels()
++            self._a6000_kernels_warmed = True
+         self.connector.init_afd_connector()
++
++    @torch.inference_mode()
++    def _warmup_local_ffn_kernels(self) -> None:
++        """Load kernels before any peer queues an AFD receive for their output."""
++        maximum = int(self.vllm_config.scheduler_config.max_num_batched_tokens)
++        maximum *= (int(self.connector.attn_size) + int(self.connector.ffn_size) - 1) // int(self.connector.ffn_size)
++        sizes = {1, maximum, max(1, maximum // 2)}
++        size = 2
++        while size < maximum:
++            sizes.add(size)
++            size *= 2
++        dp_size = int(self.vllm_config.parallel_config.data_parallel_size)
++        print("A6000 FFN kernel warmup starting", sorted(sizes, reverse=True), flush=True)
++        with _ffn_forward_context(self.vllm_config) as context:
++            for tokens in sorted(sizes, reverse=True):
++                context.dp_metadata = AFDDPMetadata(num_tokens_across_dp_cpu=[tokens] * dp_size)
++                hidden = torch.zeros((tokens, self.model_config.get_hidden_size()), dtype=self.dtype, device=self.device)
++                input_ids = (torch.zeros(tokens, dtype=torch.int32, device=self.device)
++                             if getattr(self.model, "afd_requires_input_ids", False) else None)
++                for layer_idx in range(self.num_layers):
++                    _set_moe_layer_index(context, layer_idx)
++                    output = self._execute_eager_mode(hidden, layer_idx, input_ids=input_ids)
++                torch.cuda.synchronize(self.device)
++                del hidden, output, input_ids
++        print("A6000 FFN kernel warmup complete", flush=True)
+ 
+     def load_model(self, *, load_dummy_weights: bool = False, **kwargs: Any) -> None:
+         """Load the vLLM model."""

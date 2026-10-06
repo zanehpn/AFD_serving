@@ -1,0 +1,48 @@
+--- a/afd_plugin/connectors/gpu/p2p.py
++++ b/afd_plugin/connectors/gpu/p2p.py
+@@ -308,6 +308,35 @@
+         context: AFDTransferContext,
+         **kwargs: Any,
+     ) -> None:
++        """Queue outgoing payloads independently of incoming FFN results.
++
++        DBO yields after each send. On one stream, send(stage 1) can block
++        recv(stage 0), while the FFN's send(stage 0) blocks recv(stage 1).
++        A dedicated outgoing stream breaks that cycle. Wait for the matching
++        send event before reusing the input tensor as the receive buffer.
++        """
++        if not self.vllm_config.model_config.enforce_eager:
++            return self._send_attn_output_on_current_stream(hidden_states, context, **kwargs)
++        if not hasattr(self, "_attention_send_stream"):
++            self._attention_send_stream = torch.cuda.Stream(device=hidden_states.device)
++            self._attention_send_events = {}
++        outgoing = self._attention_send_stream
++        outgoing.wait_stream(torch.cuda.current_stream(hidden_states.device))
++        with torch.cuda.stream(outgoing):
++            self._send_attn_output_on_current_stream(hidden_states, context, **kwargs)
++            self._attention_send_events[int(context.metadata.stage_idx)] = outgoing.record_event()
++            hidden_states.record_stream(outgoing)
++            for name in ("router_logits", "input_ids"):
++                tensor = kwargs.get(name)
++                if tensor is not None:
++                    tensor.record_stream(outgoing)
++
++    def _send_attn_output_on_current_stream(
++        self,
++        hidden_states: torch.Tensor,
++        context: AFDTransferContext,
++        **kwargs: Any,
++    ) -> None:
+         """Send Attention hidden states to this rank's mapped FFN rank.
+ 
+         Args:
+@@ -394,6 +423,9 @@
+             RuntimeError: If the connector is not initialized, or no receive
+                 is performed for a single-rank subgroup.
+         """
++        event = getattr(self, "_attention_send_events", {}).pop(ubatch_idx, None)
++        if event is not None:
++            torch.cuda.current_stream(ref_tensor.device).wait_event(event)
+         output = self._recv_hidden_states(
+             0,
+             self.e2a_group,

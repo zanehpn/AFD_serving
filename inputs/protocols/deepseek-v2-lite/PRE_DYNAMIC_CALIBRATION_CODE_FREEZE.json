@@ -1,0 +1,22 @@
+{
+  "status": "algorithm_fixed_before_dynamic_calibration",
+  "recorded_at": "2026-09-06T07:33:01.577350+00:00",
+  "calibration_only": true,
+  "files_sha256": {
+    "scripts/afd/causal_dvfs_v10/controller.py": "3d678668ab98247c62f13e2b7100fa657fa879abebc3f6474696c0d739830a27",
+    "scripts/afd/run_v026_causal_dvfs_v10_rate_suite.sh": "e58074d556e951a630e751e6214f1064f9f8fb5dfe72a55cfb77b40264b1bd5e",
+    "scripts/afd/make_dynamic_v10_controller.py": "c97e39945c6922f49e7037d91866d38312ada86c8243f2adea5512e57262b185"
+  },
+  "source_v9_controller": "results/afd_protocols/deepseek-v2-lite-v026-dynamic-fbss-v9-20260906/combined-controller-v9.json",
+  "rules": {
+    "rate_window_ms": 1000,
+    "relative_service_budget_ratio": 1.05,
+    "prefill_guard": "calibration MAX p90 TTFT times 1.05",
+    "progress_guard": "calibration MAX p99 TPOT times 1.05 plus producer interval plus controller poll",
+    "interpolation": "piecewise linear by observed arrival rate, clamp outside measured rate range"
+  },
+  "fresh_heldout_source_indices": [
+    6000,
+    6399
+  ]
+}

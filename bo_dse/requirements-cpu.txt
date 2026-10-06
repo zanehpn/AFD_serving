@@ -1,0 +1,7 @@
+# Separate CPU environment, tested with Python 3.10. Also installable on 3.11/3.12.
+# Do not apply this file to the repository's native vLLM environment.
+numpy==1.26.4
+scipy==1.15.3
+scikit-learn==1.7.2
+nvidia-ml-py==12.535.133
+pytest==8.4.2

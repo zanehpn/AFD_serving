@@ -1,0 +1,209 @@
+{
+  "schema_version": 1,
+  "algorithm": "four_stage_bottleneck_guided_safe_search_v1",
+  "selection_split": "calibration",
+  "profile": "results/afd_protocols/deepseek-v2-lite-v026-dynamic-fbss-v9-20260906/expanded-profile-v6.json",
+  "workloads": [
+    {
+      "prefill_tokens_per_microbatch": 57.155950752393984,
+      "decode_tokens_per_microbatch": 4.344733242134063,
+      "communication_bytes_scale": 1.0,
+      "routing_imbalance": 1.1621356845456772,
+      "arrival_rate_rps": 1.0,
+      "offered_utilization": 1.0
+    },
+    {
+      "prefill_tokens_per_microbatch": 57.155950752393984,
+      "decode_tokens_per_microbatch": 4.344733242134063,
+      "communication_bytes_scale": 1.0,
+      "routing_imbalance": 1.1621356845456772,
+      "arrival_rate_rps": 2.0,
+      "offered_utilization": 1.0
+    },
+    {
+      "prefill_tokens_per_microbatch": 57.155950752393984,
+      "decode_tokens_per_microbatch": 4.344733242134063,
+      "communication_bytes_scale": 1.0,
+      "routing_imbalance": 1.1621356845456772,
+      "arrival_rate_rps": 4.0,
+      "offered_utilization": 1.0
+    }
+  ],
+  "selection_mode": "one_shot_model_only_no_candidate_validation",
+  "slo_contract": "p90_ttft_and_p90_tpot_each_at_most_1.05x_and_output_tps_at_least_0.95x_matched_max",
+  "absolute_capacity_gate": null,
+  "additional_physical_validation_runs": 0,
+  "max_search_path_points": 8,
+  "evaluated_cheap_predictions": 7500,
+  "search_path": [
+    "c00-max",
+    "c02-e1050"
+  ],
+  "predicted_best_by_workload": [
+    "c02-e1050",
+    "c02-e1050",
+    "c02-e1050"
+  ],
+  "fail_closed_guard_candidate": "c00-max",
+  "deployment_candidates": [
+    {
+      "rps": 1.0,
+      "candidate_id": "c02-e1050"
+    },
+    {
+      "rps": 2.0,
+      "candidate_id": "c02-e1050"
+    },
+    {
+      "rps": 4.0,
+      "candidate_id": "c02-e1050"
+    }
+  ],
+  "steps": [
+    {
+      "workload_index": 0,
+      "from_candidate": "c00-max",
+      "candidate_id": "c02-e1050",
+      "bottleneck": "ffn_compute",
+      "changed_controls": [
+        "expert_mhz"
+      ],
+      "reason": "reclaim_noncritical_energy_with_slo_guard",
+      "evaluation": {
+        "candidate_id": "c02-e1050",
+        "feasible": true,
+        "rejection_reasons": [],
+        "bottleneck": "ffn_compute",
+        "stage_times_ms": {
+          "attention_compute": 39.19155311584473,
+          "a2f_dispatch": 2.6757138084081524,
+          "ffn_compute": 97.1236136284034,
+          "f2a_combine": 3.721756635506676
+        },
+        "pipeline_time_ms": 195.87540666965538,
+        "capacity_rps": 0.6804825197795279,
+        "predicted_power_w": 412.93438503457156,
+        "predicted_energy_j_per_request": 606.8258522913413,
+        "imbalance_ratio": 36.29820697684578,
+        "topology": {
+          "attention_dp": 2,
+          "expert_dp": 1,
+          "expert_ep": 2,
+          "attention_tp": 1,
+          "expert_tp": 1,
+          "attention_gpus": [
+            4,
+            5
+          ],
+          "expert_gpus": [
+            6,
+            7
+          ]
+        },
+        "knobs": {
+          "attention_mhz": 1410,
+          "attention_power_w": 400,
+          "expert_mhz": 1050,
+          "expert_power_w": 400
+        }
+      }
+    },
+    {
+      "workload_index": 1,
+      "from_candidate": "c00-max",
+      "candidate_id": "c02-e1050",
+      "bottleneck": "ffn_compute",
+      "changed_controls": [
+        "expert_mhz"
+      ],
+      "reason": "reclaim_noncritical_energy_with_slo_guard",
+      "evaluation": {
+        "candidate_id": "c02-e1050",
+        "feasible": true,
+        "rejection_reasons": [],
+        "bottleneck": "ffn_compute",
+        "stage_times_ms": {
+          "attention_compute": 39.19155311584473,
+          "a2f_dispatch": 2.6757138084081524,
+          "ffn_compute": 97.1236136284034,
+          "f2a_combine": 3.721756635506676
+        },
+        "pipeline_time_ms": 195.87540666965538,
+        "capacity_rps": 0.6804825197795279,
+        "predicted_power_w": 412.93438503457156,
+        "predicted_energy_j_per_request": 606.8258522913413,
+        "imbalance_ratio": 36.29820697684578,
+        "topology": {
+          "attention_dp": 2,
+          "expert_dp": 1,
+          "expert_ep": 2,
+          "attention_tp": 1,
+          "expert_tp": 1,
+          "attention_gpus": [
+            4,
+            5
+          ],
+          "expert_gpus": [
+            6,
+            7
+          ]
+        },
+        "knobs": {
+          "attention_mhz": 1410,
+          "attention_power_w": 400,
+          "expert_mhz": 1050,
+          "expert_power_w": 400
+        }
+      }
+    },
+    {
+      "workload_index": 2,
+      "from_candidate": "c00-max",
+      "candidate_id": "c02-e1050",
+      "bottleneck": "ffn_compute",
+      "changed_controls": [
+        "expert_mhz"
+      ],
+      "reason": "reclaim_noncritical_energy_with_slo_guard",
+      "evaluation": {
+        "candidate_id": "c02-e1050",
+        "feasible": true,
+        "rejection_reasons": [],
+        "bottleneck": "ffn_compute",
+        "stage_times_ms": {
+          "attention_compute": 39.19155311584473,
+          "a2f_dispatch": 2.6757138084081524,
+          "ffn_compute": 97.1236136284034,
+          "f2a_combine": 3.721756635506676
+        },
+        "pipeline_time_ms": 195.87540666965538,
+        "capacity_rps": 0.6804825197795279,
+        "predicted_power_w": 412.93438503457156,
+        "predicted_energy_j_per_request": 606.8258522913413,
+        "imbalance_ratio": 36.29820697684578,
+        "topology": {
+          "attention_dp": 2,
+          "expert_dp": 1,
+          "expert_ep": 2,
+          "attention_tp": 1,
+          "expert_tp": 1,
+          "attention_gpus": [
+            4,
+            5
+          ],
+          "expert_gpus": [
+            6,
+            7
+          ]
+        },
+        "knobs": {
+          "attention_mhz": 1410,
+          "attention_power_w": 400,
+          "expert_mhz": 1050,
+          "expert_power_w": 400
+        }
+      }
+    }
+  ],
+  "heldout_artifacts_opened": 0
+}

@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "status": "frozen_calibration_policy",
+  "frozen_at": "2026-09-06T14:37:41+08:00",
+  "selection_split": "calibration",
+  "heldout_requests_used_for_tuning": 0,
+  "slo_contract": "p90_ttft_and_p90_tpot_each_at_most_1.05x_and_output_tps_at_least_0.95x_matched_max",
+  "calibration_root": "results/afd_suites/DeepSeek-V2-Lite-Chat/deepseek-v2-lite-v026-dynamic-fbss-v9-calibration-retry1-20260906",
+  "calibration_trace_sha256": "66c06afb199fc4a586809b8a9e5ec26c67aafff2579fa054b22b0a2cc9b25fc8",
+  "heldout_trace_sha256": "c8c611b2ae64c3339b51e6806e3691b3d364b4bd7746f4d54ea5bceb176c7259",
+  "calibration_grid_sha256": "d9c538748d3e2bb36983a5cb9065d5f36cd3521814865dcdbcf1b68469e855e6",
+  "calibration_profile_sha256": "227b4b8dd2ebbbc8d19073f74b4d482ca7d13affc30ed6182e1a70e07f02d410",
+  "expanded_profile_sha256": "0b150c42cd48e4d0181b205483f41cb6b4a357a9f7c8c0e6834f20d59166bf28",
+  "fbss_decision_sha256": "901a8ecf9e53f3a76832d90426e6775dc4b11eb1acbe3b0d5b3c2f7c3fdad326",
+  "additional_candidate_validation_runs": 0,
+  "heldout_status": "identity-disjoint and unseen before freeze",
+  "next_step": "evaluate this frozen policy once without feedback",
+  "plugin_commit": "a38619b0e4c34ecae73b9aa1bcd5ba9617369b99"
+}

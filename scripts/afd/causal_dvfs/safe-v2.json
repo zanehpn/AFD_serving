@@ -1,0 +1,70 @@
+{
+  "schema_version": 2,
+  "policy_version": 2,
+  "method": "deterministic_causal_role_dvfs_backlog_v2",
+  "selection_split": "calibration",
+  "control_interval_ms": 50,
+  "initial_states": {
+    "attention": "eco",
+    "expert": "normal"
+  },
+  "events": {
+    "submit_wakeup": "named_pipe",
+    "progress_mode": "batched",
+    "progress_event_interval_ms": 250
+  },
+  "signals": {
+    "queue_growth_window_ms": 1000,
+    "arrival_ewma_alpha": 0.25,
+    "arrival_ewma_decay_ms": 2000,
+    "max_instantaneous_arrival_rps": 32
+  },
+  "frequencies_mhz": {
+    "attention": {
+      "eco": 1170,
+      "normal": 1290,
+      "boost": 1410
+    },
+    "expert": {
+      "eco": 1170,
+      "normal": 1290,
+      "boost": 1410
+    }
+  },
+  "thresholds": {
+    "attention": {
+      "boost_prefill": 1,
+      "boost_prefill_age_ms": 150,
+      "boost_queue_growth_rps": 1.0,
+      "boost_arrival_ewma_rps": 1.0,
+      "normal_arrival_ewma_rps": 0.25
+    },
+    "expert": {
+      "boost_prefill": 4,
+      "boost_backlog_prefill_age_ms": 300,
+      "boost_prefill_age_ms": 1000,
+      "boost_queue_growth_rps": 0.5,
+      "boost_arrival_ewma_rps": 0.75,
+      "boost_queue_growth_hold_ms": 500,
+      "boost_progress_gap_ms": 1500
+    }
+  },
+  "safety": {
+    "downshift_hold_ms": {
+      "attention": 250,
+      "expert": 1000
+    },
+    "minimum_transition_interval_ms": {
+      "attention": 250,
+      "expert": 1000
+    },
+    "event_stale_ms": 1000
+  },
+  "ablation_arms": [
+    "placement-max",
+    "static-e1290",
+    "dynamic-a",
+    "dynamic-e",
+    "dynamic-ae"
+  ]
+}

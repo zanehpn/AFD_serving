@@ -1,0 +1,114 @@
+{
+  "schema_version": 1,
+  "model_kind": "roofline_alpha_beta_reentrant_pipeline",
+  "parameter_status": "unmeasured_template_do_not_use_as_data",
+  "selection_split": "calibration",
+  "model": null,
+  "calibration_trace_sha256": null,
+  "measurement_sources": [],
+  "architecture": {
+    "layers": null,
+    "hidden_size": null,
+    "experts": null,
+    "top_k": null,
+    "attention_flops_per_token": null,
+    "attention_context_flops_per_pair": null,
+    "attention_weight_bytes_per_layer": null,
+    "attention_activation_bytes_per_token": null,
+    "kv_bytes_per_context_token": null,
+    "expert_flops_per_routed_token": null,
+    "expert_weight_bytes_per_layer": null,
+    "expert_activation_bytes_per_routed_token": null,
+    "shared_expert_flops_per_token": null,
+    "shared_expert_weight_bytes_per_layer": null
+  },
+  "hardware": {
+    "attention": {
+      "reference_mhz": 1410,
+      "idle_w": null,
+      "dynamic_w_at_reference": null,
+      "prefill": {
+        "effective_flops_per_s": null,
+        "effective_bytes_per_s": null,
+        "launch_s": null
+      },
+      "decode": {
+        "effective_flops_per_s": null,
+        "effective_bytes_per_s": null,
+        "launch_s": null
+      },
+      "voltage_ratio_by_mhz": {
+        "1410": 1
+      }
+    },
+    "expert": {
+      "reference_mhz": 1410,
+      "idle_w": null,
+      "dynamic_w_at_reference": null,
+      "prefill": {
+        "effective_flops_per_s": null,
+        "effective_bytes_per_s": null,
+        "launch_s": null
+      },
+      "decode": {
+        "effective_flops_per_s": null,
+        "effective_bytes_per_s": null,
+        "launch_s": null
+      },
+      "voltage_ratio_by_mhz": {
+        "1410": 1
+      }
+    },
+    "inactive_gpu_w": null
+  },
+  "topologies": {
+    "2a1e": {
+      "routing_load_factor": null,
+      "a2f": {
+        "messages_per_layer": null,
+        "latency_s": null,
+        "bytes_per_token": null,
+        "effective_bytes_per_s": null
+      },
+      "f2a": {
+        "messages_per_layer": null,
+        "latency_s": null,
+        "bytes_per_token": null,
+        "effective_bytes_per_s": null
+      },
+      "expert_collective": {
+        "messages_per_layer": null,
+        "latency_s": null,
+        "bytes_per_token": null,
+        "effective_bytes_per_s": null
+      }
+    },
+    "2a2e": {
+      "routing_load_factor": null,
+      "a2f": {
+        "messages_per_layer": null,
+        "latency_s": null,
+        "bytes_per_token": null,
+        "effective_bytes_per_s": null
+      },
+      "f2a": {
+        "messages_per_layer": null,
+        "latency_s": null,
+        "bytes_per_token": null,
+        "effective_bytes_per_s": null
+      },
+      "expert_collective": {
+        "messages_per_layer": null,
+        "latency_s": null,
+        "bytes_per_token": null,
+        "effective_bytes_per_s": null
+      }
+    }
+  },
+  "scheduler": {
+    "max_num_seqs": 32,
+    "max_num_batched_tokens": 3072,
+    "microbatches": 2,
+    "max_output_tokens": 128
+  }
+}

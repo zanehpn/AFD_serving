@@ -1,0 +1,404 @@
+{
+  "schema_version": 5,
+  "policy_version": 5,
+  "method": "fbss_constrained_causal_stage_routing_joint_frequency_power_v9",
+  "selection_split": "calibration",
+  "control_interval_ms": 50,
+  "initial_states": {
+    "attention": "f1410-p400",
+    "expert": "f1050-p400"
+  },
+  "events": {
+    "submit_wakeup": "named_pipe",
+    "progress_mode": "batched",
+    "progress_event_interval_ms": 250
+  },
+  "signals": {
+    "queue_growth_window_ms": 1000,
+    "arrival_ewma_alpha": 0.2,
+    "arrival_ewma_decay_ms": 2000,
+    "max_instantaneous_arrival_rps": 8,
+    "work_ewma_alpha": 0.2,
+    "routing_ewma_alpha": 0.25,
+    "routing_stale_ms": 750
+  },
+  "frequencies_mhz": {
+    "attention": {
+      "f1050-p400": 1050,
+      "f1410-p200": 1410,
+      "f1410-p400": 1410
+    },
+    "expert": {
+      "f1050-p400": 1050,
+      "f1410-p200": 1410,
+      "f1410-p400": 1410
+    }
+  },
+  "power_caps_w": {
+    "attention": {
+      "f1050-p400": 400,
+      "f1410-p200": 200,
+      "f1410-p400": 400
+    },
+    "expert": {
+      "f1050-p400": 400,
+      "f1410-p200": 200,
+      "f1410-p400": 400
+    }
+  },
+  "predictor": {
+    "type": "direct_stage_next_window_joint_energy_minimizer",
+    "fixed_topology": "2A2E",
+    "static_dse_online": false,
+    "future_trace_access": false,
+    "prediction_horizon_ms": 500,
+    "utilization_limit": 0.75,
+    "risk_margin": 1.2,
+    "queue_growth_gain": 0.5,
+    "active_prefill_reserve": 0.5,
+    "decode_progress_ewma_alpha": 0.25,
+    "reference_workload": {
+      "input_tokens_mean": 905.62,
+      "output_tokens_mean": 107.0
+    },
+    "work_weights": {
+      "attention": {
+        "prefill": 0.052883604304142184,
+        "decode": 0.9471163956958578,
+        "source": "direct_stage_nnls_at_1410mhz_400w"
+      },
+      "expert": {
+        "prefill": 0.08745910555855752,
+        "decode": 0.9125408944414425,
+        "source": "direct_stage_nnls_at_1410mhz_400w"
+      }
+    },
+    "routing_model": {
+      "signal": "online_max_domain_load_over_uniform_domain_load",
+      "source_role": "ffn",
+      "reference_imbalance_median": 1.1034543325526933,
+      "calibration_imbalance_p95": 1.1953125,
+      "calibration_imbalance_max": 1.993632075471698,
+      "windows": 237,
+      "stale_fallback": "calibration_p95"
+    },
+    "routing_collection": {
+      "source_role": "ffn",
+      "prefill_only": true,
+      "async_copy": true,
+      "layer_stride": 4,
+      "request_detail": false
+    },
+    "role_models": {
+      "attention": {
+        "guard_state": "f1410-p400",
+        "maximum_capacity_reference_work_per_s": 1.9713417538903077,
+        "phase_service_model": {
+          "prefill_intercept_ms_per_step": 17.9270713634415,
+          "prefill_ms_per_token": 0.019871701057232474,
+          "decode_intercept_ms_per_step": 39.606740420967554,
+          "decode_ms_per_token": 0.0,
+          "prefill_steps": 67,
+          "decode_steps": 950,
+          "samples": 962,
+          "rmse_ms": 27.14706184228064
+        },
+        "power_model": {
+          "type": "role_specific_measured_state_nonnegative_linear_utilization",
+          "equation": "min(power_cap_w, idle_intercept_w + dynamic_slope_w * utilization)",
+          "states": {
+            "f1050-p400": {
+              "frequency_mhz": 1050,
+              "power_cap_w": 400,
+              "idle_intercept_w": 87.40920311940815,
+              "dynamic_slope_w": 16.017756223657297,
+              "samples": 168,
+              "utilization_range": [
+                0.017114008431491936,
+                0.3657331461497417
+              ],
+              "rmse_w": 3.853133871971152
+            },
+            "f1410-p200": {
+              "frequency_mhz": 1410,
+              "power_cap_w": 200,
+              "idle_intercept_w": 113.82109687601002,
+              "dynamic_slope_w": 0.0,
+              "samples": 181,
+              "utilization_range": [
+                0.06181612552396585,
+                0.37353883694219525
+              ],
+              "rmse_w": 5.5562576874006275
+            },
+            "f1410-p400": {
+              "frequency_mhz": 1410,
+              "power_cap_w": 400,
+              "idle_intercept_w": 113.37890975421146,
+              "dynamic_slope_w": 3.2122427872544996,
+              "samples": 516,
+              "utilization_range": [
+                0.006573633090566537,
+                0.37166424486054533
+              ],
+              "rmse_w": 5.807260095612557
+            }
+          },
+          "samples": 865,
+          "utilization_range": [
+            0.006573633090566537,
+            0.37353883694219525
+          ],
+          "rmse_w": 5.427801560553345
+        },
+        "operating_points": [
+          {
+            "state": "f1050-p400",
+            "frequency_mhz": 1050,
+            "power_cap_w": 400,
+            "capacity_reference_work_per_s": 2.022303802089484,
+            "capacity_ratio_to_guard": 1.0258514527471487,
+            "predicted_utilization_at_reference_demand": 0.2863241431554774,
+            "reference_demand_feasible_at_75pct": true,
+            "predicted_power_w_at_reference_demand": 91.99547344542013,
+            "measured_average_power_w_per_gpu": 91.44296064982993
+          },
+          {
+            "state": "f1410-p200",
+            "frequency_mhz": 1410,
+            "power_cap_w": 200,
+            "capacity_reference_work_per_s": 1.8893200250011388,
+            "capacity_ratio_to_guard": 0.9583929429144872,
+            "predicted_utilization_at_reference_demand": 0.3064776722159533,
+            "reference_demand_feasible_at_75pct": true,
+            "predicted_power_w_at_reference_demand": 113.82109687601002,
+            "measured_average_power_w_per_gpu": 113.89951300485494
+          },
+          {
+            "state": "f1410-p400",
+            "frequency_mhz": 1410,
+            "power_cap_w": 400,
+            "capacity_reference_work_per_s": 2.0025108497541346,
+            "capacity_ratio_to_guard": 1.0158111072330898,
+            "predicted_utilization_at_reference_demand": 0.2891541903028534,
+            "reference_demand_feasible_at_75pct": true,
+            "predicted_power_w_at_reference_demand": 114.30774321641621,
+            "measured_average_power_w_per_gpu": 114.22047379413426
+          }
+        ]
+      },
+      "expert": {
+        "guard_state": "f1410-p400",
+        "maximum_capacity_reference_work_per_s": 0.7700445578079388,
+        "phase_service_model": {
+          "prefill_intercept_ms_per_step": 131.0754218954284,
+          "prefill_ms_per_token": 0.0,
+          "decode_intercept_ms_per_step": 96.4538941355088,
+          "decode_ms_per_token": 0.0,
+          "prefill_steps": 67,
+          "decode_steps": 950,
+          "samples": 962,
+          "rmse_ms": 118.97382904769643
+        },
+        "power_model": {
+          "type": "role_specific_measured_state_nonnegative_linear_utilization",
+          "equation": "min(power_cap_w, idle_intercept_w + dynamic_slope_w * utilization)",
+          "states": {
+            "f1050-p400": {
+              "frequency_mhz": 1050,
+              "power_cap_w": 400,
+              "idle_intercept_w": 91.97963914931508,
+              "dynamic_slope_w": 8.198889845598226,
+              "samples": 162,
+              "utilization_range": [
+                0.2742671636243581,
+                0.843455159318139
+              ],
+              "rmse_w": 5.253017546924138
+            },
+            "f1410-p200": {
+              "frequency_mhz": 1410,
+              "power_cap_w": 200,
+              "idle_intercept_w": 119.34798019312194,
+              "dynamic_slope_w": 2.645755720823606,
+              "samples": 180,
+              "utilization_range": [
+                0.3122952239665708,
+                0.9751308065441817
+              ],
+              "rmse_w": 8.000781578139415
+            },
+            "f1410-p400": {
+              "frequency_mhz": 1410,
+              "power_cap_w": 400,
+              "idle_intercept_w": 121.25960886999603,
+              "dynamic_slope_w": 0.0,
+              "samples": 523,
+              "utilization_range": [
+                0.17509320018634417,
+                1.0
+              ],
+              "rmse_w": 9.22395348942381
+            }
+          },
+          "samples": 865,
+          "utilization_range": [
+            0.17509320018634417,
+            1.0
+          ],
+          "rmse_w": 8.362456679056846
+        },
+        "operating_points": [
+          {
+            "state": "f1050-p400",
+            "frequency_mhz": 1050,
+            "power_cap_w": 400,
+            "capacity_reference_work_per_s": 0.8950628231333471,
+            "capacity_ratio_to_guard": 1.1623519886710112,
+            "predicted_utilization_at_reference_demand": 0.646920404208399,
+            "reference_demand_feasible_at_75pct": true,
+            "predicted_power_w_at_reference_demand": 97.28366828228963,
+            "measured_average_power_w_per_gpu": 96.54873780009183
+          },
+          {
+            "state": "f1410-p200",
+            "frequency_mhz": 1410,
+            "power_cap_w": 200,
+            "capacity_reference_work_per_s": 0.8361430307075968,
+            "capacity_ratio_to_guard": 1.0858372054310965,
+            "predicted_utilization_at_reference_demand": 0.6925064038903971,
+            "reference_demand_feasible_at_75pct": true,
+            "predicted_power_w_at_reference_demand": 121.18018297292194,
+            "measured_average_power_w_per_gpu": 120.83750236991855
+          },
+          {
+            "state": "f1410-p400",
+            "frequency_mhz": 1410,
+            "power_cap_w": 400,
+            "capacity_reference_work_per_s": 0.8287506566853823,
+            "capacity_ratio_to_guard": 1.0762372752098401,
+            "predicted_utilization_at_reference_demand": 0.6986834926311906,
+            "reference_demand_feasible_at_75pct": true,
+            "predicted_power_w_at_reference_demand": 121.25960886999603,
+            "measured_average_power_w_per_gpu": 121.34304195322049
+          }
+        ]
+      }
+    },
+    "joint_operating_points": [
+      {
+        "id": "c00-max",
+        "attention_state": "f1410-p400",
+        "expert_state": "f1410-p400",
+        "calibration_energy_j": 40417.90528893956,
+        "calibration_p90_ttft_ms": 1978.1658740714192,
+        "calibration_p90_tpot_ms": 326.2800172069932,
+        "ttft_ratio_to_matched_max": 1.0,
+        "tpot_ratio_to_matched_max": 1.0,
+        "output_tps_ratio_to_matched_max": 1.0,
+        "calibration_latency_eligible": true,
+        "calibration_throughput_eligible": true,
+        "calibration_slo_eligible": true
+      },
+      {
+        "id": "c02-e1050",
+        "attention_state": "f1410-p400",
+        "expert_state": "f1050-p400",
+        "calibration_energy_j": 33927.65832544502,
+        "calibration_p90_ttft_ms": 1013.5203596204519,
+        "calibration_p90_tpot_ms": 301.3036459749237,
+        "ttft_ratio_to_matched_max": 0.5123535760600529,
+        "tpot_ratio_to_matched_max": 0.9234511158670671,
+        "output_tps_ratio_to_matched_max": 1.0750906921033758,
+        "calibration_latency_eligible": true,
+        "calibration_throughput_eligible": true,
+        "calibration_slo_eligible": true
+      }
+    ],
+    "fbss_binding": {
+      "decision": "results/afd_protocols/qwen36-v026-dynamic-fbss-v9b-20260906/fbss-decision-v6.json",
+      "decision_sha256": "dc072d01d709feaa7a43a07d24cc32709566cf3074f393379e65325ea071a31c",
+      "selected_candidates": [
+        "c02-e1050"
+      ],
+      "allowed_dynamic_candidates": [
+        "c00-max",
+        "c02-e1050"
+      ],
+      "constraint": "dynamic controller may use only MAX or a frozen FBSS deployment candidate"
+    },
+    "calibration_relative_latency_budget": {
+      "baseline_cell": "c00-max",
+      "max_ratio": 1.05,
+      "metrics": [
+        "p90_ttft_ms",
+        "p90_tpot_ms"
+      ]
+    },
+    "calibration_relative_throughput_budget": {
+      "baseline_cell": "c00-max",
+      "min_ratio": 0.95,
+      "metric": "output_token_throughput_tps"
+    },
+    "urgent_thresholds": {
+      "attention": {
+        "boost_prefill_age_ms": 350,
+        "boost_progress_gap_ms": 300
+      },
+      "expert": {
+        "boost_prefill_age_ms": 350,
+        "boost_progress_gap_ms": 300
+      }
+    },
+    "observable_inputs": [
+      "post_submit_input_tokens",
+      "post_submit_requested_output_tokens",
+      "arrival_rate_ewma",
+      "current_prefill_work",
+      "queue_growth",
+      "request_age",
+      "observed_progress_gap",
+      "online_router_domain_histogram"
+    ],
+    "forbidden_inputs": [
+      "future_arrivals",
+      "future_output_lengths",
+      "evaluation_trace_file",
+      "same_trace_oracle_schedule"
+    ],
+    "calibration_profile": {
+      "path": "results/afd_protocols/qwen36-v026-dynamic-fbss-v9b-20260906/routing-profile-v9.json",
+      "file_sha256": "e7f5544c35de85408d79a24e116e213371450c2bd015279c359f78e638c1b364"
+    }
+  },
+  "thresholds": {},
+  "safety": {
+    "downshift_hold_ms": {
+      "attention": 500,
+      "expert": 750
+    },
+    "minimum_transition_interval_ms": {
+      "attention": 250,
+      "expert": 500
+    },
+    "event_stale_ms": 1000,
+    "routing_stale_action": "calibration_p95",
+    "actuation_failure_action": "both_roles_f1410_p400"
+  },
+  "compatibility": {
+    "model": "Qwen3.6-35B-A3B",
+    "gpu_model": "NVIDIA A100-SXM4-80GB",
+    "attention_dp": 2,
+    "expert_ep": 2,
+    "attention_tp": 1,
+    "expert_tp": 1,
+    "compute_gate_on_attention": false,
+    "routing_source_role": "ffn"
+  },
+  "ablation_arms": [
+    "placement-max",
+    "dynamic-a",
+    "dynamic-e",
+    "dynamic-ae"
+  ]
+}

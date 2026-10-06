@@ -1,0 +1,68 @@
+{
+  "description": "Source snapshot of the model-assisted BO implementation. SHA-256 values identify the exported Python files; documentation and migration helpers are maintained separately.",
+  "files_sha256": {
+    "scripts/afd/build_deepseek_v6_four_stage_profile.py": "ddf6401a0648c0c7dc6e7519e3f681b980249257cd057239d66265d5ac40987a",
+    "scripts/afd/four_stage_dse_v6/__init__.py": "debebb6faa4b6d533db2d3107cc1790d1552a06ea794c142748241ef42127560",
+    "scripts/afd/four_stage_dse_v6/attention_workload.py": "c456345df7db3340ee8966ee5a9234c365b7b5f95c671cd69cc30d9e94c65045",
+    "scripts/afd/four_stage_dse_v6/model.py": "4ede7db8304b273946841f8ac3468054973fc1973f1281e4e3dd33f34746ffe2",
+    "scripts/afd/four_stage_dse_v6/runtime.py": "ddd5793b8b250a965b0c3bf93222f434f68a83e439478c48b6b6b85cefaeda80",
+    "scripts/afd/four_stage_dse_v6/schedule.py": "33cc5e6bab304e5235aad5b47d6a47c3246df46a84dc0e25cacad4671949e68e",
+    "scripts/afd/four_stage_dse_v6/search.py": "b2c00048780718e5e51a687ebf13387f8781bb96be5fa69de31be68aded24c5a",
+    "scripts/afd/four_stage_dse_v6/surrogate.py": "e1fc90c066f5f76b855489c7d3bd2fb0b79522b31011252fc4cfb7c5189adaa0",
+    "scripts/afd/four_stage_dse_v6/test_analytical_bridge.py": "92e7419969d2e11a0c22ec5eb88871987c998a25eb63fd1d7247e4d3c0716b74",
+    "scripts/afd/four_stage_dse_v6/test_attention_workload.py": "aaf9c87852cafe9d40587ab68bde3581a64705d61d6788a9eafd7cdb963782c3",
+    "scripts/afd/four_stage_dse_v6/test_model.py": "26ce54cce8aa749d3a7d6e714a7ffc847eb87c861cbf7fb076b825cb5f872ffd",
+    "scripts/afd/four_stage_dse_v6/test_provisioning.py": "ea3e421ad83b96d70eb39a8d24c0333e2683ce1283ae2aac9a3f080fc03c0430",
+    "scripts/afd/four_stage_dse_v6/test_runtime.py": "263627be24d60a182d181a30a83cce4a04500e66b391cb1cad3a24cfcaaf138b",
+    "scripts/afd/four_stage_dse_v6/test_search.py": "8e9431fbcc544a3825377b5e719ab3d6e2da2126ce668a4643119ca28383280e",
+    "scripts/afd/four_stage_dse_v6/test_surrogate.py": "087f4d7fe8aeb25fcd5288c31e409944eef57b2a0180c39f703c09c75f72b851",
+    "scripts/afd/four_stage_dse_v6/test_workload_response.py": "104d106eb63cc5112ff05b89b79aedbd060005f48c04eee33e131de135825285",
+    "scripts/afd/four_stage_dse_v6/workload_response.py": "a4a2e0570a9bb9cc0d35b36f97f68ffaf087e71b1d617718ea919f14881a38a6",
+    "scripts/afd/launch_pair.py": "d624963c034f8fe93d31fef376f0c7fe54bdc05ab8f2ab2705622dc059638bee",
+    "scripts/afd/measure_command.py": "40d77040c711381a431aa2e58643e159898ba60bea0afe67010d09ff0b0e1a08",
+    "scripts/afd/static_dse/__init__.py": "40f1eca38440fa488f67c09fc619513dfc02333536f0424529065c890ea8c218",
+    "scripts/afd/static_dse/analytical.py": "b7d5abc8c015e44692ba8586ed9adcf59da1da6bcb221af4c121488f62f4e54e",
+    "scripts/afd/static_dse/calibration.py": "201ea35ad1c1df941b6ce64d73665d3bcf977aa2a6a621bad8c691c58108414f",
+    "scripts/afd/static_dse/campaign.py": "31c65fa10c0936db2ae3d395fec0c88b1fb4dd831d29e55c20ecf885fdb5dfcd",
+    "scripts/afd/static_dse/comparison.py": "7e6726d209808d336e9cf84a2b2c86d28ce4bd8756c98a547440a46235df8e01",
+    "scripts/afd/static_dse/demo.py": "dfaab048b94fafb776a1adbbb8ccbef5e85a4dcafebbe04fccc24736d682e1da",
+    "scripts/afd/static_dse/executor.py": "c3fcb1785b21270618f9954f85bc98a0fd8ba63a66146656573443e65132e562",
+    "scripts/afd/static_dse/feedback.py": "8762f1a21c28a763121618849fe9f23440f0e3c76e0aae25acad1d83649be14f",
+    "scripts/afd/static_dse/mechanism.py": "99da6cc2ded273544f6dd687feac8836a2ffac9cf10996882157768a5afbdf63",
+    "scripts/afd/static_dse/optimizer.py": "b8a6e25df7c0784e0ef44bc9875960109b723be942704ddb87670138403fb2a2",
+    "scripts/afd/static_dse/provisioning.py": "6319419749ff22d2efee4cb357b99871cac5b0df928228483ec352c49a412923",
+    "scripts/afd/static_dse/response.py": "ce995deb1a7909c80181cd096ae412bec7d27f700367df815133e34ce00b7a48",
+    "scripts/afd/static_dse/space.py": "84f24c0162f86406fe2db52a4f7109536d125133e548ac8bcdf839057ee47bf9",
+    "scripts/afd/static_dse_cli.py": "99324aa9b985d3786b5d48f118be36b9d3117104616084a30ed49a978c0074bd",
+    "scripts/afd/test_build_deepseek_v6_four_stage_profile.py": "45a95a96b7304c579a4cee823ceb76777f5114eb961bea1a4f514a4414106113",
+    "scripts/afd/test_measure_command.py": "fd7cedc3c3b643cc43c5866b340edd593bfa8d3481e37ac610bd2df033ad7c66",
+    "scripts/afd/test_static_dse.py": "a69696600962c671c1312d177a4ace2c00a37914905ce0d64fc7b76a53bec5a4",
+    "scripts/afd/test_static_dse_extensions.py": "2fec3f8e46b8f10b78e0651fb3427204859dcf41450df9bee260d2780823a0e0"
+  },
+  "export_adjustments": {
+    "scripts/afd/static_dse/__init__.py": {
+      "source_sha256": "2ed25365f1a498be5b4b86bf0a594793914a0b000e695acb1c2f752325718449",
+      "change": "Removed one trailing blank line; no executable change."
+    },
+    "scripts/afd/static_dse/comparison.py": {
+      "source_sha256": "3c7e78f5d0559a7f4abd6d9d30fcb8898deafd09b5358e3aa10020575d56eb18",
+      "change": "Native integration adds per-trial comparison timeout and resumable atomic campaign initialization."
+    },
+    "scripts/afd/static_dse/space.py": {
+      "source_sha256": "73904dcbd239a471565ac55a657bcb6d28c6e0e1cf490c3a885941e18dc23eb4",
+      "change": "Native P2P capability explicitly filters Attention/Expert rank ratios for 4/6/8-GPU BO."
+    },
+    "scripts/afd/build_deepseek_v6_four_stage_profile.py": {
+      "source_sha256": "e82d7a70506793b71fef6b7eb7384e7b18dc6a43ab731273d94ea65a861a8e36",
+      "change": "Preserve legacy rank_max parsing; add DP-total context, validated first-layer decode spans and per-layer causal-participant barriers."
+    },
+    "scripts/afd/static_dse/feedback.py": {
+      "source_sha256": "0d7b6e19a3ba989615cbe5f8869883ea34c0629d2bb0e35a269266174dddef22",
+      "change": "Bind raw calibration traces and completed replay to automatically fitted analytical coefficients, request moments, role powers and finite-microbatch schedules."
+    },
+    "scripts/afd/test_build_deepseek_v6_four_stage_profile.py": {
+      "source_sha256": "b88abc5794d2c4c000edc30c709af307e998140989510009becf97cc5ef344cc",
+      "change": "Check equal DP-total token normalization across one-to-one and many-to-one Expert layouts."
+    }
+  }
+}

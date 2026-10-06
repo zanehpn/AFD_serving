@@ -1,0 +1,120 @@
+{
+  "schema_version": 2,
+  "method": "dynamic_v10_calibration",
+  "arm": "ours",
+  "candidate_id": "one-shot-fbss-routing-v8",
+  "model": "DeepSeek-V2-Lite-Chat",
+  "evaluation_split": "calibration",
+  "selection_split": "calibration",
+  "calibration_trace": "results/afd_suites/dynamic-fbss-v9-inputs-20260906/calibration-200.jsonl",
+  "calibration_trace_sha256": "66c06afb199fc4a586809b8a9e5ec26c67aafff2579fa054b22b0a2cc9b25fc8",
+  "plugin": {
+    "root": "third_party/afd-plugin-ecodep-v026-deepseek-dynamic-v9",
+    "commit": "a38619b0e4c34ecae73b9aa1bcd5ba9617369b99",
+    "worktree_clean": true
+  },
+  "topology": {
+    "attention_dp": 2,
+    "ffn_ep": 2,
+    "attention_tp": 1,
+    "expert_tp": 1
+  },
+  "placement": {
+    "enabled": false,
+    "mode": "native-linear",
+    "selection_split": "architecture-default"
+  },
+  "operating_points": {
+    "selection_split": "calibration",
+    "candidate_id": "one-shot-fbss-routing-v8",
+    "calibration_trace_sha256": "66c06afb199fc4a586809b8a9e5ec26c67aafff2579fa054b22b0a2cc9b25fc8",
+    "comparison_contract_sha256": "7793ddc2c92e2030777597fbc680355b4020c360b2a5def1626abd3e2514cb5c",
+    "by_rps": {
+      "1": {
+        "candidate_id": "c02-e1050",
+        "attention_mhz": [
+          1410,
+          1410
+        ],
+        "expert_mhz": [
+          1050,
+          1050
+        ],
+        "attention_power_w": [
+          400,
+          400
+        ],
+        "expert_power_w": [
+          400,
+          400
+        ],
+        "request_path_clock_transitions": 0,
+        "policy": "one_shot_fbss_no_candidate_validation",
+        "calibration_feasible": true,
+        "selection_split": "calibration"
+      },
+      "2": {
+        "candidate_id": "c02-e1050",
+        "attention_mhz": [
+          1410,
+          1410
+        ],
+        "expert_mhz": [
+          1050,
+          1050
+        ],
+        "attention_power_w": [
+          400,
+          400
+        ],
+        "expert_power_w": [
+          400,
+          400
+        ],
+        "request_path_clock_transitions": 0,
+        "policy": "one_shot_fbss_no_candidate_validation",
+        "calibration_feasible": true,
+        "selection_split": "calibration"
+      },
+      "4": {
+        "candidate_id": "c02-e1050",
+        "attention_mhz": [
+          1410,
+          1410
+        ],
+        "expert_mhz": [
+          1050,
+          1050
+        ],
+        "attention_power_w": [
+          400,
+          400
+        ],
+        "expert_power_w": [
+          400,
+          400
+        ],
+        "request_path_clock_transitions": 0,
+        "policy": "one_shot_fbss_no_candidate_validation",
+        "calibration_feasible": true,
+        "selection_split": "calibration"
+      }
+    }
+  },
+  "runtime_contract": {
+    "base": "official_vllm_afd_v0.26_role_pruned_data_plane",
+    "cuda_graph_full_decode_only": false,
+    "ffn_cudagraph": false,
+    "enable_dbo": true,
+    "compute_gate_on_attention": false,
+    "prefix_caching": true,
+    "routing_sidecar": false,
+    "routing_ffn_sidecar": false,
+    "routing_source_role": "attention",
+    "routing_async_copy": true,
+    "stage_trace": false,
+    "expert_boundary_action": false,
+    "request_path_clock_transitions": 0,
+    "operating_point_semantics": "one_shot_frozen_per_rate_cell"
+  }
+}

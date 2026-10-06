@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "method": "deterministic_causal_role_dvfs_three_state",
+  "selection_split": "calibration",
+  "control_interval_ms": 50,
+  "frequencies_mhz": {
+    "attention": {"eco": 1170, "normal": 1290, "boost": 1410},
+    "expert": {"eco": 1170, "normal": 1290, "boost": 1410}
+  },
+  "thresholds": {
+    "attention": {
+      "normal_outstanding": 2,
+      "normal_decode": 2,
+      "boost_outstanding": 12,
+      "boost_prefill": 1,
+      "boost_prefill_tokens": 1,
+      "boost_prefill_age_ms": 100,
+      "boost_progress_gap_ms": 300
+    },
+    "expert": {
+      "normal_outstanding": 2,
+      "normal_decode": 2,
+      "boost_outstanding": 10,
+      "boost_prefill": 2,
+      "boost_prefill_tokens": 2048,
+      "boost_prefill_age_ms": 200,
+      "boost_progress_gap_ms": 300
+    }
+  },
+  "safety": {
+    "downshift_hold_ms": 1500,
+    "minimum_transition_interval_ms": 500,
+    "event_stale_ms": 500
+  },
+  "ablation_arms": [
+    "placement-max",
+    "static-e1290",
+    "dynamic-a",
+    "dynamic-e",
+    "dynamic-ae"
+  ]
+}

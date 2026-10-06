@@ -1,0 +1,14 @@
+{
+  "upstream_url": "https://github.com/vllm-project/afd-plugin.git",
+  "base_commit": "85e826ed8239dd9d8032375bb84a56116e24f0e0",
+  "bundle": "patches/afd-custom.bundle",
+  "targets": {
+    "afd-plugin-ecodep-v026-deepseek-dynamic-v9": "c131619f5588cb685c9a5e2ade1b3c55717231f1",
+    "afd-plugin-ecodep-v026-dvfs-v6-four-stage": "35a04a8ab1fcffbf171bb0e6147eb159d7c594fe"
+  },
+  "bundle_sha256": "663b04cf51ed05690031288fa8767a5b2b1bc0c64006fba8729499cf5eb9cc5d",
+  "target_refs": {
+    "afd-plugin-ecodep-v026-deepseek-dynamic-v9": "refs/heads/joint-deepseek",
+    "afd-plugin-ecodep-v026-dvfs-v6-four-stage": "refs/heads/joint-qwen"
+  }
+}

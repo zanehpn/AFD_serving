@@ -1,0 +1,9 @@
+{
+  "reason": "Fix eager AFD DBO send/receive stream dependency cycle",
+  "files": {
+    ".venv-a6000-p2p/lib/python3.12/site-packages/afd_plugin/connectors/gpu/p2p.py": {
+      "before_sha256": "4a98fa3b1ee4121be0c176ca52581d0257ca6e8adbeb57e69497374543d84288",
+      "after_sha256": "07fa0e6fe8a2e356132da957351c7be870b00946327978e5568625d3ca8a555e"
+    }
+  }
+}

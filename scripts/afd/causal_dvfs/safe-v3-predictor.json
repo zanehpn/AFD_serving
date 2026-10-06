@@ -1,0 +1,137 @@
+{
+  "schema_version": 3,
+  "policy_version": 3,
+  "method": "causal_afd_stage_bottleneck_predictor_v3",
+  "selection_split": "calibration",
+  "control_interval_ms": 50,
+  "initial_states": {
+    "attention": "normal",
+    "expert": "normal"
+  },
+  "events": {
+    "submit_wakeup": "named_pipe",
+    "progress_mode": "batched",
+    "progress_event_interval_ms": 250
+  },
+  "signals": {
+    "queue_growth_window_ms": 1000,
+    "arrival_ewma_alpha": 0.2,
+    "arrival_ewma_decay_ms": 2000,
+    "max_instantaneous_arrival_rps": 8,
+    "work_ewma_alpha": 0.2
+  },
+  "frequencies_mhz": {
+    "attention": {
+      "eco": 930,
+      "normal": 1050,
+      "boost": 1410
+    },
+    "expert": {
+      "eco": 990,
+      "normal": 1230,
+      "boost": 1410
+    }
+  },
+  "predictor": {
+    "type": "next_window_stage_capacity",
+    "paper_inspiration": "How Far Can Disaggregation Go? A Design-Space Exploration of Attention-FFN Disaggregation for Efficient MoE LLM Serving",
+    "paper_url": "https://arxiv.org/abs/2605.28302",
+    "fixed_topology": "2A2E",
+    "static_dse_online": false,
+    "future_trace_access": false,
+    "prediction_horizon_ms": 500,
+    "utilization_limit": 0.8,
+    "risk_margin": 1.1,
+    "queue_growth_gain": 0.5,
+    "active_prefill_reserve": 0.25,
+    "reference_workload": {
+      "input_tokens_mean": 911.1914893617021,
+      "output_tokens_mean": 111.61702127659575
+    },
+    "work_weights": {
+      "attention": {
+        "prefill": 0.5,
+        "decode": 0.5
+      },
+      "expert": {
+        "prefill": 0.5,
+        "decode": 0.5
+      }
+    },
+    "role_models": {
+      "attention": {
+        "maximum_capacity_reference_work_per_s": 2.240201797969061,
+        "capacity_ratio_by_state": {
+          "eco": 0.9359241674305366,
+          "normal": 0.9732103407248401,
+          "boost": 1.0
+        }
+      },
+      "expert": {
+        "maximum_capacity_reference_work_per_s": 2.2222222222222223,
+        "capacity_ratio_by_state": {
+          "eco": 0.9117617223193032,
+          "normal": 1.0,
+          "boost": 1.0
+        }
+      }
+    },
+    "urgent_thresholds": {
+      "attention": {
+        "boost_prefill_age_ms": 300,
+        "boost_progress_gap_ms": 1000
+      },
+      "expert": {
+        "boost_prefill_age_ms": 500,
+        "boost_progress_gap_ms": 1000
+      }
+    },
+    "calibration_profile": {
+      "path": "results/afd_suites/Qwen3.6-35B-A3B/qwen36-afd-dse-measured-sim-v1-20260902/fast-advisor-profile-v1.json",
+      "file_sha256": "21137913bab806678efb8653cb13897bf321636d009e8aa912e7d949cc2e72e7",
+      "embedded_profile_sha256": "f1c3dd1fd6821e65442b16f4e58743f4538959cca4849328fed3f2a0069b3ec1"
+    },
+    "observable_inputs": [
+      "post_submit_input_tokens",
+      "post_submit_requested_output_tokens",
+      "arrival_rate_ewma",
+      "current_prefill_work",
+      "queue_growth",
+      "request_age",
+      "observed_progress_gap"
+    ],
+    "forbidden_inputs": [
+      "future_arrivals",
+      "future_output_lengths",
+      "evaluation_trace_file",
+      "same_trace_oracle_schedule"
+    ]
+  },
+  "thresholds": {},
+  "safety": {
+    "downshift_hold_ms": {
+      "attention": 500,
+      "expert": 750
+    },
+    "minimum_transition_interval_ms": {
+      "attention": 250,
+      "expert": 500
+    },
+    "event_stale_ms": 1000,
+    "out_of_support_action": "both_roles_1410_mhz"
+  },
+  "compatibility": {
+    "model": "Qwen3.6-35B-A3B",
+    "gpu_model": "NVIDIA A100-SXM4-80GB",
+    "attention_dp": 2,
+    "expert_ep": 2,
+    "attention_tp": 1,
+    "expert_tp": 1
+  },
+  "ablation_arms": [
+    "placement-max",
+    "dynamic-a",
+    "dynamic-e",
+    "dynamic-ae"
+  ]
+}

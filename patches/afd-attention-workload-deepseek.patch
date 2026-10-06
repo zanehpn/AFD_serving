@@ -1,0 +1,209 @@
+diff --git a/afd_plugin/model_executor/models/deepseek_v2.py b/afd_plugin/model_executor/models/deepseek_v2.py
+index 7a2bd71..be8cf49 100644
+--- a/afd_plugin/model_executor/models/deepseek_v2.py
++++ b/afd_plugin/model_executor/models/deepseek_v2.py
+@@ -196,6 +196,7 @@ class RemoteFFNProxy(nn.Module):
+             decode_tokens=decode_tokens,
+             phase=afd_metadata.phase,
+             transaction_id=afd_metadata.transaction_id,
++            request_token_spans=afd_metadata.request_token_spans,
+         ):
+             with afd_metadata.connector.stage_tracer.record(
+                 "a2f_dispatch",
+@@ -578,6 +579,7 @@ class AFDDeepseekV2DecoderLayer(native.DeepseekV2DecoderLayer):
+             decode_tokens=decode_tokens,
+             phase=afd_metadata.phase,
+             transaction_id=afd_metadata.transaction_id,
++            request_token_spans=afd_metadata.request_token_spans,
+         ):
+             return super().forward(
+                 positions,
+@@ -683,6 +685,7 @@ class AFDDeepseekV2DecoderLayer(native.DeepseekV2DecoderLayer):
+             decode_tokens=decode_tokens,
+             phase=afd_metadata.phase,
+             transaction_id=afd_metadata.transaction_id,
++            request_token_spans=afd_metadata.request_token_spans,
+         ):
+             return self._compute_attn_output_untraced(
+                 positions,
+diff --git a/afd_plugin/model_executor/models/qwen3_5.py b/afd_plugin/model_executor/models/qwen3_5.py
+index 296f3e0..f480505 100644
+--- a/afd_plugin/model_executor/models/qwen3_5.py
++++ b/afd_plugin/model_executor/models/qwen3_5.py
+@@ -313,6 +313,7 @@ class AFDQwen3_5DecoderLayer(native.Qwen3_5DecoderLayer):  # noqa: N801
+             decode_tokens=decode_tokens,
+             phase=afd_metadata.phase,
+             transaction_id=afd_metadata.transaction_id,
++            request_token_spans=afd_metadata.request_token_spans,
+         ):
+             return super().forward(
+                 hidden_states,
+diff --git a/afd_plugin/observability.py b/afd_plugin/observability.py
+index ab72287..c01cad1 100644
+--- a/afd_plugin/observability.py
++++ b/afd_plugin/observability.py
+@@ -12,10 +12,51 @@ import time
+ from collections.abc import Iterator
+ from contextlib import contextmanager
+ from pathlib import Path
+-from typing import cast
++from typing import TYPE_CHECKING, cast
+
+ import torch
+
++if TYPE_CHECKING:
++    from afd_plugin.connectors.metadata import AFDRequestTokenSpan
++
++
++
++def summarize_attention_workload(
++    spans: list[AFDRequestTokenSpan], stage_idx: int,
++) -> dict[str, int | str] | None:
++    """Summarize exact real-token context work without reading GPU tensors.
++
++    Causal query/key pairs are a logical work feature, not HBM traffic. A GPU
++    may use MLA, sliding windows or linear attention; the fitted response must
++    remain model-specific. Missing spans mean unknown, never zero KV work.
++    """
++    selected = [span for span in spans if span.stage_idx == stage_idx]
++    if not selected:
++        return None
++    prefill = decode = prefill_context = decode_context = 0
++    request_ends: dict[str, int] = {}
++    occupied: list[tuple[int, int]] = []
++    for span in selected:
++        count, position = span.token_count, span.first_token_position
++        if count <= 0 or position < 0:
++            raise ValueError("invalid causal span in Attention workload")
++        occupied.append((span.token_offset, span.token_offset + count))
++        p = min(count, max(span.prompt_tokens - position, 0))
++        d = count - p
++        prefill += p
++        decode += d
++        prefill_context += p * (position + 1) + p * (p - 1) // 2
++        decode_context += d * (position + p + 1) + d * (d - 1) // 2
++        request_ends[span.request_id] = max(request_ends.get(span.request_id, 0), position + count)
++    occupied.sort()
++    if any(left[1] > right[0] for left, right in zip(occupied, occupied[1:])):
++        raise ValueError("overlapping real-token spans in Attention workload")
++    return {"schema_version": 1, "source": "request_token_spans",
++            "active_requests": len(request_ends),
++            "kv_sequence_tokens": sum(request_ends.values()),
++            "prefill_tokens": prefill, "decode_tokens": decode,
++            "prefill_context_tokens": prefill_context,
++            "decode_context_tokens": decode_context}
+
+ def _cuda_graph_capture_active() -> bool:
+     """Return whether telemetry is being invoked by a CUDA graph dummy run.
+@@ -125,6 +166,7 @@ class StageTracer:
+         bytes_count: int | None = None,
+         phase: str = "unknown",
+         transaction_id: str | None = None,
++        request_token_spans: list[AFDRequestTokenSpan] | None = None,
+     ) -> Iterator[None]:
+         trace_epoch = self._epoch_path is not None and event == "ffn_compute"
+         if not self.enabled and not trace_epoch:
+@@ -135,6 +177,8 @@ class StageTracer:
+         if _cuda_graph_capture_active():
+             yield
+             return
++        attention_workload = (summarize_attention_workload(request_token_spans, stage_idx or 0)
++                              if request_token_spans is not None else None)
+         use_cuda_events = self.async_cuda_events and torch.cuda.is_available()
+         device = torch.cuda.current_device() if use_cuda_events else -1
+         start_event = torch.cuda.Event(enable_timing=True) if use_cuda_events else None
+@@ -171,6 +215,8 @@ class StageTracer:
+                 "bytes": bytes_count,
+                 "phase": phase,
+                 "transaction_id": transaction_id,
++                "attention_workload": attention_workload,
++                "timing_source": "cuda_events" if use_cuda_events else ("cuda_synchronized_host" if self.synchronize_cuda else "host"),
+                 "pid": os.getpid(),
+             }
+             if end_event is not None and start_event is not None:
+diff --git a/tests/unit/test_attention_workload_trace.py b/tests/unit/test_attention_workload_trace.py
+new file mode 100644
+index 0000000..33bcbb3
+--- /dev/null
++++ b/tests/unit/test_attention_workload_trace.py
+@@ -0,0 +1,80 @@
++from __future__ import annotations
++
++import json
++
++import pytest
++
++from afd_plugin.connectors.metadata import AFDRequestTokenSpan
++from afd_plugin.observability import StageTracer, summarize_attention_workload
++from afd_plugin.v1.worker.ubatch_wrapper import slice_request_token_spans
++
++
++def span(request, offset, count, position, prompt, stage=0):
++    return AFDRequestTokenSpan(request_id=request, token_offset=offset, token_count=count,
++                               first_token_position=position, prompt_tokens=prompt,
++                               phase="mixed", stage_idx=stage)
++
++
++def test_context_summary_counts_causal_work_and_excludes_other_microbatch():
++    spans = [span("p", 0, 3, 4, 6), span("d", 3, 1, 100, 10), span("other", 0, 1, 9000, 10, 1)]
++    row = summarize_attention_workload(spans, 0)
++    assert row["prefill_tokens"] == 2
++    assert row["decode_tokens"] == 2
++    assert row["prefill_context_tokens"] == 5 + 6
++    assert row["decode_context_tokens"] == 7 + 101
++    assert row["kv_sequence_tokens"] == 7 + 101
++    assert row["active_requests"] == 2
++
++
++def test_missing_spans_are_unknown_not_zero_context():
++    assert summarize_attention_workload([], 0) is None
++    assert summarize_attention_workload([span("other", 0, 1, 9000, 10, 1)], 0) is None
++
++
++def test_real_spans_exclude_padded_transport_tokens():
++    row = summarize_attention_workload([span("real", 0, 1, 40, 10)], 0)
++    assert row["active_requests"] == 1
++    assert row["decode_tokens"] == 1
++    assert row["decode_context_tokens"] == 41
++
++
++def test_context_summary_preserves_chunked_prefill_after_ubatch_slicing():
++    original = [span("r", 0, 6, 4, 8)]
++    left = slice_request_token_spans(original, 0, 3, stage_idx=0)
++    right = slice_request_token_spans(original, 3, 6, stage_idx=1)
++    a, b = summarize_attention_workload(left, 0), summarize_attention_workload(right, 1)
++    assert a["prefill_context_tokens"] == 5 + 6 + 7
++    assert b["prefill_context_tokens"] == 8
++    assert b["decode_context_tokens"] == 9 + 10
++
++
++def test_duplicate_overlapping_spans_fail():
++    with pytest.raises(ValueError, match="overlapping"):
++        summarize_attention_workload([span("a", 0, 2, 20, 10), span("b", 1, 2, 30, 10)], 0)
++
++
++def test_trace_writes_real_context_and_timing_source(tmp_path, monkeypatch):
++    path = tmp_path / "trace.jsonl"
++    monkeypatch.setenv("ECODEP_STAGE_TRACE", str(path))
++    monkeypatch.setenv("ECODEP_TRACE_CUDA_EVENTS", "0")
++    monkeypatch.delenv("ECODEP_TRACE_SYNC_CUDA", raising=False)
++    tracer = StageTracer(role="attention", rank=0)
++    with tracer.record("attention_compute", transaction_id="real", stage_idx=0,
++                       tokens=16, prefill_tokens=0, decode_tokens=1,
++                       request_token_spans=[span("r", 0, 1, 1023, 100)]):
++        pass
++    row = json.loads(path.read_text())
++    assert row["attention_workload"]["decode_context_tokens"] == 1024
++    assert row["attention_workload"]["decode_tokens"] == 1
++    assert row["tokens"] == 16
++    assert row["timing_source"] == "host"
++
++
++def test_disabled_tracer_does_not_process_context(monkeypatch):
++    monkeypatch.delenv("ECODEP_STAGE_TRACE", raising=False)
++    monkeypatch.delenv("ECODEP_EXPERT_EPOCH_TRACE", raising=False)
++    tracer = StageTracer(role="attention", rank=0)
++    # Invalid duplicate spans would raise if the disabled path processed them.
++    spans = [span("a", 0, 2, 20, 10), span("b", 1, 2, 30, 10)]
++    with tracer.record("attention_compute", request_token_spans=spans):
++        pass
