@@ -167,30 +167,30 @@ def main():
         writer.writeheader()
         writer.writerows(rows)
     labels = {'v2':'V2', 'generic_bo':'BO', 'random':'Random', 'MAX':'MAX'}
-    lines = ['# DeepSeek RPS 4：DBO 开启、阈值参与搜索（已完成）', '',
-        '本快照包含 48 次搜索尝试（V2、BO、Random 各 16 次，seed 0）及 4 次冻结配置复测。每次测量使用相同的 200 条 calibration 请求。其他未完成场景不在本快照中。', '',
-        '**V2 在搜索阶段找到最低能耗的 SLO 可行配置；但四个配置在之后的 calibration 复测中均未通过原始 SLO，包括 MAX，因此目前不能认定存在经复测确认的 SLO 最优方法。没有 heldout 结果。**', '',
-        '## 搜索结果', '', '| 方法 | 尝试 | 成功 | SLO 可行 | 最佳可行能耗 kJ | TTFT ms | TPOT ms | 吞吐 token/s |', '|---|---:|---:|---:|---:|---:|---:|---:|']
+    lines = ['# DeepSeek RPS 4: DBO enabled with threshold search (complete)', '',
+        'This snapshot includes 48 search attempts (16 each for V2, BO, and Random, seed 0) and four frozen-configuration confirmations. Every measurement uses the same 200 calibration requests. Other unfinished scenarios are excluded.', '',
+        '**V2 found the lowest-energy SLO-feasible configuration during search. However, all four configurations, including MAX, failed the original SLOs during later calibration confirmations. No method has a confirmed SLO-feasible optimum from those repeats. No held-out results are available.**', '',
+        '## Search results', '', '| Method | Attempts | Successful | SLO feasible | Best feasible energy kJ | TTFT ms | TPOT ms | Throughput token/s |', '|---|---:|---:|---:|---:|---:|---:|---:|']
     for method, value in methods.items():
         m = value['deployment']['best']['metrics']
         lines.append(f"| {labels[method]} | 16 | {value['successful']} | {value['slo_feasible']} | {m['energy_j']/1000:.3f} | {m['ttft_ms']:.3f} | {m['tpot_ms']:.3f} | {m['output_tps']:.3f} |")
-    lines += ['', 'Random 的一次 warmup 失败保留在 16 次预算和原始记录中。', '',
-        '**V2 选出的配置：3 张活跃 GPU，2 A（GPU 1、2）+ 1 E（GPU 5）；A/E 均 1050 MHz、每卡 200 W；DBO decode/prefill 阈值 32/512。** GPU 6 未参与该配置。A 为 DP=2、TP=1；E 为 DP=1、EP=1、TP=1。', '',
-        '可用池为 GPU 1、2、5、6，采用 NVML locked clocks。全程 DBO 开启，microbatches=2；阈值候选为 2/12、8/128、32/512。使用 upstream vLLM 0.26.0 AFD、eager、禁用 prefix cache。', '',
-        '## 冻结配置复测（同一 calibration，各 1 次）', '', '| 方法 | 能耗 kJ | TTFT ms | TPOT ms | 吞吐 token/s | 未通过的原始 SLO |', '|---|---:|---:|---:|---:|---|']
+    lines += ['', 'The Random warmup failure remains charged against its 16-attempt budget and retained in the raw records.', '',
+        '**V2 selected three active GPUs: 2 A (GPUs 1, 2) + 1 E (GPU 5), both roles at 1050 MHz and 200 W per GPU, with DBO decode/prefill thresholds of 32/512.** GPU 6 was unused. A: DP=2, TP=1; E: DP=1, EP=1, TP=1.', '',
+        'The available pool was GPUs 1, 2, 5, 6 with NVML locked clocks. DBO remained enabled with microbatches=2; threshold candidates were 2/12, 8/128, and 32/512. Runtime: upstream vLLM 0.26.0 AFD, eager execution, prefix caching disabled.', '',
+        '## Frozen-configuration confirmations (same calibration, one each)', '', '| Method | Energy kJ | TTFT ms | TPOT ms | Throughput token/s | Failed original SLOs |', '|---|---:|---:|---:|---:|---|']
     for row in confirmations['rows']:
         m = row['metrics']
         lines.append(f"| {labels[row['method']]} | {m['energy_j']/1000:.3f} | {m['ttft_ms']:.3f} | {m['tpot_ms']:.3f} | {m['output_tps']:.3f} | {', '.join(row['failed_slos'])} |")
-    lines += ['', f"固定 SLO：TTFT ≤ {limits['ttft_ms']:.6f} ms；TPOT ≤ {limits['tpot_ms']:.6f} ms；吞吐 ≥ {limits['min_output_tps']:.6f} token/s。延迟上限为历史 MAX 的 105%，吞吐下限为其 95%，所有条件须同时满足。未用新 MAX 复测重设门槛。", '',
-        '历史 RPS 4 MAX 使用修改过的 plugin 且启用 prefix cache，与本次运行时不同；相对历史 MAX 的能耗差异不能单独归因于搜索方法。复测明显波动，单次 calibration 结果不能证明泛化或稳定优越性。', '',
-        '## 文件与校验', '',
-        '- `summary.json`：完整最佳配置、指标、复测结果及限制。',
-        '- `measurements.csv`：全部 52 条记录，区分搜索与复测，保留失败。',
-        '- `manifest.json` / `*.tar.gz.part*`：原始测量、日志、遥测、输入、冻结源码和运行时元数据，逐文件及压缩分块 SHA-256。',
-        '- `validation.json`：预算、冻结状态、测量证据、357 个冻结文件、请求身份隔离及恢复校验。',
-        '- `restore.py`：恢复并核验全部原始文件；不会执行归档内的实验代码。', '',
-        '恢复命令：`python restore.py restored-output`。归档保留相对工作区路径；原始 JSON 内的绝对路径仍用于历史溯源。模型权重、容器镜像和依赖缓存未打包，因此恢复文件不等于可直接重新启动实验。', '',
-        '归档中的 legacy heldout 输入仅保留隔离溯源，不代表已经测量，也不是另外计划的正式 heldout split。calibration 与该 legacy heldout 在 source_index、source_timestamp 上均无交集；warmup 来自 calibration。只核验了请求完成，未核验语义正确性或输出 token 完全相等。', '']
+    lines += ['', f"Fixed SLOs: TTFT <= {limits['ttft_ms']:.6f} ms; TPOT <= {limits['tpot_ms']:.6f} ms; throughput >= {limits['min_output_tps']:.6f} token/s. Latency ceilings are 105% of historical MAX and the throughput floor is 95%; all constraints must hold together. The new MAX confirmation did not reset these thresholds.", '',
+        'Historical RPS 4 MAX used a modified plugin and prefix caching, unlike this runtime; differences from its energy cannot be attributed solely to search. Confirmation measurements varied substantially. A single calibration run does not establish generalization or consistent superiority.', '',
+        '## Files and verification', '',
+        '- `summary.json`: complete selected configurations, metrics, confirmations, and limitations.',
+        '- `measurements.csv`: all 52 records, separating search and confirmations and retaining failures.',
+        '- `manifest.json` / `*.tar.gz.part*`: raw measurements, logs, telemetry, inputs, frozen sources, and runtime metadata with file and archive-part SHA-256 hashes.',
+        '- `validation.json`: budgets, frozen state, measurement evidence, 357 frozen files, request-identity isolation, and restoration checks.',
+        '- `restore.py`: restore and verify every original file without executing archived experiment code.', '',
+        'Restore with `python restore.py restored-output`. Archive members use relative workspace paths; absolute paths in original JSON records preserve historical provenance. Model weights, container images, and dependency caches are excluded, so restoring files alone does not make the experiment runnable.', '',
+        'Legacy held-out inputs preserve isolation provenance only; they do not establish completed measurements and are not the separately planned formal held-out split. Calibration and legacy held-out have no overlap in source_index or source_timestamp; warmup comes from calibration. Checks establish request completion, not semantic correctness or exact output-token equality.', '']
     (dest / 'README.md').write_text('\n'.join(lines))
     with tempfile.TemporaryDirectory(prefix='dbo-archive-restore-') as restored:
         result = subprocess.run([sys.executable, str(dest / 'restore.py'), restored], check=True, text=True, capture_output=True)

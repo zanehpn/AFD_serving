@@ -86,7 +86,7 @@ def main():
         assert sha(RUN / 'source' / rel) == sha(ROOT / rel)
         policy[str(rel)] = sha(RUN / 'source' / rel)
     plan = dict(status='frozen', created_at=datetime.now(timezone.utc).isoformat(),
-        authorized_user_request='Qwen RPS8 四卡 A6000 用最新版 V2 重新跑一遍',
+        authorized_user_request='Rerun Qwen RPS8 on four A6000 GPUs with the latest V2',
         source=str(RUN / 'source'), methods=['v2'], jobs=[job], gpus=[0, 1, 2, 3],
         algorithm='legal_contractions_v2', capacity_policy_revision='legal_contractions_v2',
         policy_sha256=policy, policy_origin_commit='1dc910f6ad5e3e0e35c9d5c631e481344f271a28',

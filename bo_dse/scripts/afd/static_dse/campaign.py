@@ -21,6 +21,7 @@ from .calibration import planned_candidate
 from .space import (audit, configuration, digest, enumerate_candidates, hardware_from_snapshot,
                     integer, launch_environment, model_priors, positive, structure)
 from four_stage_dse_v6.model import STAGES
+from . import paper_model
 
 
 DEFAULT_BO = {"method": "bo", "use_model_prior": True, "model_screening": True,
@@ -158,6 +159,7 @@ def validate_settings(settings):
     if settings.get('mechanism_model') == 'external_power_duration_v1':
         if settings.get('require_four_stage'):
             raise ValueError('Official external model requires no stage labels')
+    paper_model.validate_settings(settings)
 
 
 def validate_cost(cost):
@@ -195,6 +197,15 @@ def create_campaign(config_path, directory):
     if "gpu_metadata_csv" in hardware:
         hardware = hardware_from_snapshot(hardware)
     runtime, profile, spec = (read_json(paths[k]) for k in ("runtime", "profile", "specification"))
+    if settings.get('mechanism_model') == paper_model.MODEL:
+        if profile.get('external_observations'):
+            raise ValueError('Paper energy model rejects observable-only calibration profiles')
+        anchors = [c for c in profile.get('candidates', [])
+                   if c.get('validation_status') == 'physically_measured_anchor']
+        if not anchors:
+            raise ValueError('Paper energy model requires measured four-stage calibration anchors')
+        for anchor in anchors:
+            paper_model.validate_feedback(anchor)
     if settings["mode"] == "physical":
         if not settings.get("model_id") or profile.get("model") != settings["model_id"] or runtime.get("model_id") != settings["model_id"]:
             raise ValueError("model-specific profile/runtime evidence must match model_id")
@@ -466,6 +477,8 @@ def validate_result(result, pending, bundle):
             raise ValueError("this campaign requires measured four-stage feedback for every successful trial")
         if "four_stage" in result:
             stage = result["four_stage"]
+            if bundle['settings'].get('mechanism_model') == paper_model.MODEL:
+                paper_model.validate_feedback(stage)
             if not stage.get('model_feedback_supported', True):
                 if (not pending['workload'].get('allow_model_feedback_fallback')
                         or not stage.get('model_fallback_reason') or 'stage_models' in stage

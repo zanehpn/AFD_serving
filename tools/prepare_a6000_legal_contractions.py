@@ -97,7 +97,7 @@ def main():
     write(run / 'PLAN.json', plan)
     overlay = json.loads((PREVIOUS / 'RESIDENT_EXECUTION.json').read_text())
     overlay.update(authorized_at=datetime.now(timezone.utc).isoformat(),
-                   user_request='确认换到 legal_contractions_v2 最新版开始跑',
+                   user_request='Start the latest legal_contractions_v2 revision',
                    plan_sha256=sha(run / 'PLAN.json'),
                    scope='Fresh legal_contractions_v2, all four methods, both models at RPS8 and RPS16',
                    driver_sha256=sha(Path(overlay['driver'])))

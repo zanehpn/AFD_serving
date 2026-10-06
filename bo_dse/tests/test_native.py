@@ -31,7 +31,7 @@ def host(tmp_path, monkeypatch, request):
         shutil.copytree(REPO / name, root / name, ignore=shutil.ignore_patterns('__pycache__'))
     for name in ('migration/output_correctness.py', 'migration/static_dse.py', 'migration/bo_topology.py', 'migration/bo_layout.py', 'migration/verify_joint_launch.py', 'migration/native_service.py', 'scripts/afd/summarize_replay.py', 'bo_dse/native_backend.py',
                  'bo_dse/correctness_reference.py', 'bo_dse/stock_reference.py',
-                 'bo_dse/native.py', 'environment/plugins.lock.json', 'inputs/protocols/qwen36/calibration-max-deployment.json'):
+                 'bo_dse/native.py', 'bo_dse/entrypoint.py', 'environment/plugins.lock.json', 'inputs/protocols/qwen36/calibration-max-deployment.json'):
         target = root / name
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(REPO / name, target)
@@ -216,6 +216,9 @@ def test_bootstrap_to_real_importer_ask_tell_freeze(host):
     args, config, launches = host
     settings = native.prepare(config)
     assert len(launches) == len(config['references'])
+    assert settings['mechanism_model'] == 'four_stage_fifo_v1'
+    assert settings['require_four_stage'] is True
+    assert not settings['workload'].get('allow_model_feedback_fallback')
     deployment = next((args.directory / 'bootstrap-00/native/deployments').glob('*.json'))
     assert read_json(deployment)['plugin']['commit'] == config['plugin_commit']
     assert settings['setup_cost']['evaluations'] == 4
@@ -594,6 +597,16 @@ def test_joint_gpu_mapping_through_prepare_ask_measure_tell(host, monkeypatch, t
     assert all(req['configuration'][k]==v for k,v in target.items())
     path=campaign/'trials'/req['trial_id']/'result.json';path.parent.mkdir(parents=True)
     receipt=native.execute(config,req,path)
+    if target['expert_dp'] > 1:
+        # Independent replica schedules currently have no identified four-stage
+        # prior. Charge the failed trial instead of accepting end-to-end fallback.
+        assert receipt['status'] == 'failed'
+        assert 'independent_replica' in receipt['failure_reason']
+        tell(campaign, receipt)
+        observations = read_json(campaign / 'state.json')['observations']
+        assert observations[-1]['status'] == 'failed'
+        assert observations[-1]['candidate_id'] == req['candidate_id']
+        return
     assert receipt['status']=='ok',receipt.get('failure_reason')
     assert receipt['output_correctness']['verified']
     missing_gate = copy.deepcopy(receipt)
@@ -601,9 +614,6 @@ def test_joint_gpu_mapping_through_prepare_ask_measure_tell(host, monkeypatch, t
     with pytest.raises(ValueError, match='output correctness'):
         tell(campaign, missing_gate)
     assert receipt['four_stage']['observed_microbatches']==target['microbatches']
-    if target['expert_dp']>1:
-        assert receipt['four_stage']['model_feedback_supported'] is False
-        assert 'stage_models' not in receipt['four_stage']
     tell(campaign,receipt)
     assert ask(campaign)['structure_validation_trial'] is False
 
@@ -723,7 +733,7 @@ def test_comparison_initialization_uses_matched_bootstrap_and_budgets(host):
     write_json(config['config_path'], config)
     native.prepare(config)
     manifest = read_json(args.directory / 'comparison/comparison.json')
-    assert len(manifest['campaigns']) == 3
+    assert len(manifest['campaigns']) == 4
     bootstrap_count = len(config['references'])
     assert manifest['setup_cost_per_arm']['evaluations'] == bootstrap_count
     assert manifest['budget_per_arm']['evaluations'] == args.evaluations

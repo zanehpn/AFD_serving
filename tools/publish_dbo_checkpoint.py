@@ -152,14 +152,14 @@ def main():
     write(dest / 'trace-isolation.json', isolation)
     shutil.copyfile(repo / 'tools/restore_dbo_checkpoint.py', dest / 'restore.py')
     shutil.copyfile(repo / 'tools/preflight_dbo_checkpoint.py', dest / 'preflight.py')
-    (dest / 'README.md').write_text('# DBO 跨机器交接断点包\n\n'
-        '入口：[新 root 环境 agent 交接说明](../../docs/ROOT_AGENT_HANDOFF.md)。\n\n'
-        f"快照时间：{summary['snapshot_utc']}。包含全部四个场景的准备数据、{summary['observations']} 条优化器观测、{summary['search_receipts']} 个搜索回执、{summary['confirmation_receipts']} 个复测回执、冻结源码和迁移所需元数据。\n\n"
-        '**这是断点和溯源包，不是可跨机器直接启动的镜像。原 GPU UUID/运行时被冻结，root 不能直接执行旧启动器绕过它。** 原机没有被本次导出停止，本包的旧 PID 不可用于控制新机进程。\n\n'
-        '两条 pending 失败回执保留原样，未选择性重跑或清零预算。只报告 calibration；正式 heldout 仍未评测。\n\n'
-        '恢复：`python3 restore.py ../moe-import`；只读预检：`python3 preflight.py ../moe-import`。\n\n'
-        '容器镜像、模型权重、虚拟环境和编译缓存不在包中；所需大文件见 external-dependencies.json。不要把完整依赖实测记录直接当作可安装的 requirements。\n\n'
-        'manifest.json 包含文件和压缩分块哈希；restore.py 验证全部文件后恢复内部相对链接。新机采用独立批次，不将原机性能观测直接导入新机优化器。具体条件及执行顺序见交接说明。\n')
+    (dest / 'README.md').write_text('# DBO cross-host checkpoint package\n\n'
+        'Entry point: [handoff for a new root environment](../../docs/ROOT_AGENT_HANDOFF.md).\n\n'
+        f"Snapshot time: {summary['snapshot_utc']}. Includes preparation data for all four scenarios, {summary['observations']} optimizer observations, {summary['search_receipts']} search receipts, {summary['confirmation_receipts']} confirmation receipts, frozen sources, and migration metadata.\n\n"
+        '**This package preserves checkpoints and provenance; it is not a cross-host runnable image. The original GPU UUIDs and runtime are frozen and must not be bypassed by executing old launchers as root.** Exporting did not stop the source host. Old PIDs must not be used to control processes on the destination.\n\n'
+        'The two pending failure receipts are preserved without selective reruns or budget resets. Results cover calibration only; formal held-out evaluation remains pending.\n\n'
+        'Restore: `python3 restore.py ../moe-import`; read-only preflight: `python3 preflight.py ../moe-import`.\n\n'
+        'Container images, model weights, virtual environments, and build caches are excluded; required large files are listed in external-dependencies.json. The full observed dependency inventory is not an installable requirements file.\n\n'
+        'manifest.json contains file and archive-part hashes; restore.py verifies every file before restoring internal relative links. Start an independent campaign on the destination; do not import source-host performance observations into its optimizer. See the handoff for prerequisites and execution order.\n')
     with tempfile.TemporaryDirectory(prefix='dbo-checkpoint-verify-') as restored:
         output = subprocess.run([sys.executable, str(dest / 'restore.py'), restored], check=True, text=True, capture_output=True)
         # Verify the byte boundary inside the restored checkpoint, including aliases.

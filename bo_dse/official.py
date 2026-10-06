@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Validate upstream four/eight-GPU AFD, then search with observable-only priors."""
+"""Paper entry point; upstream observable-only functions are historical compatibility code.
+
+The upstream runtime has no four-stage instrumentation. Its duration/power model
+is available only through an explicit --backend legacy-observable selection.
+The default command dispatches to the instrumented paper implementation.
+"""
 import argparse
 from contextlib import contextmanager
 import fcntl
@@ -180,6 +185,7 @@ def initialize(args):
                     required_evaluations_before_filtering=3 if getattr(args, 'direct_search', False) else count+3,
                     execution_verified=False, gpu_actions_performed=False,
                     mechanism_model='external_power_duration_v1', actual_microbatch_splits_available=False,
+                    require_four_stage=False, paper_method=False,
                     excluded=['independent expert replicas',
                               'M>2', 'async', 'PP', 'multinode', 'graph: deferred from initial eager protocol'],
                     next_steps=['immutable split audit', 'stock token reference', 'validate every structure using calibration',
@@ -642,11 +648,11 @@ def run(config, one=False):
     return comparison_report(target) if config['comparison'] else status(target)
 
 
-def main():
+def legacy_main(argv=None):
     def interrupted(signum, frame):
         raise KeyboardInterrupt(f'Interrupted by signal {signum}; retain receipts and recover if needed')
     signal.signal(signal.SIGTERM, interrupted)
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description='Historical upstream-only duration/power prior; not the paper four-stage model.')
     sub = parser.add_subparsers(dest='action', required=True)
     p = sub.add_parser('start')
     p.add_argument('--directory', type=Path, required=True)
@@ -704,7 +710,7 @@ def main():
     p.add_argument('--count', type=int, default=4, choices=[4])
     p.add_argument('--minimum-free-gib', type=float, default=65)
     p.add_argument('--output', type=Path)
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if args.action == 'select-gpus':
         from gpu_selection import inspect
         import pynvml
@@ -738,6 +744,11 @@ def main():
                         recover_attempt(config, path)
             result = dict(action=args.action, directory=str(args.directory))
     print(json.dumps(result, indent=2, allow_nan=False))
+
+
+def main(argv=None):
+    from entrypoint import main as dispatch
+    return dispatch(argv)
 
 
 if __name__ == '__main__':

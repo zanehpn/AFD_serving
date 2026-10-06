@@ -14,7 +14,7 @@ from .space import KNOBS, configuration, digest, structure
 from four_stage_dse_v6.model import STAGES
 
 
-def features(candidates):
+def features(candidates, *, include_analytical=True):
     structures = sorted({digest(structure(c)) for c in candidates})
     lookup = {key: i for i, key in enumerate(structures)}
     numeric = np.asarray([[math.log(configuration(c)[k]) for k in KNOBS] for c in candidates])
@@ -27,6 +27,8 @@ def features(candidates):
                          if len(c.get("mechanism", {}).get("stage_ms", {})) == 4 else [0.] * 4
                          for c in candidates])
     stages /= np.maximum(stages.max(axis=1, keepdims=True), 1e-9)
+    if not include_analytical:
+        return np.concatenate([numeric, cats, stages], axis=1)
     analytical = []
     for c in candidates:
         mechanism = c.get("mechanism", {})
@@ -138,7 +140,7 @@ def propose(candidates, observations, settings, eligible_ids, remaining_gpu_hour
         return candidates[i], {"reason": "measure_reference", "expected_gpu_hours": float(costs[i]), "base_gpu_hours": float(base_costs[i])}
     # The generic BO baseline must not receive mechanism features for free.
     feature_candidates = candidates if options["use_model_prior"] else [{k: v for k, v in c.items() if k != "mechanism"} for c in candidates]
-    x = features(feature_candidates)
+    x = features(feature_candidates, include_analytical=settings.get('mechanism_model') != 'four_stage_fifo_v1')
     successful = [o for o in model_observations if o["status"] == "ok"]
     indices = [by_id[o["candidate_id"]] for o in successful]
     use_prior = options["use_model_prior"]

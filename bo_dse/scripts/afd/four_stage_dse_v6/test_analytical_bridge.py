@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from build_deepseek_v6_four_stage_profile import load_four_stage_groups
-from four_stage_dse_v6.model import STAGES, pipeline_time_ms
+from four_stage_dse_v6.model import STAGES, pipeline_time_ms, bottleneck_pipeline_time_ms
 from static_dse.analytical import calibrated_model, predict
 
 
@@ -19,7 +19,8 @@ def test_finite_population_obeys_serial_path_and_single_batch_exactness():
     assert pipeline_time_ms(stages, microbatches=1, layers=10, schedule_model=schedule()) == 40.
     assert pipeline_time_ms(stages, microbatches=2, layers=10, schedule_model=schedule()) >= 40.
     # Keep historical profiles numerically stable when no schedule was frozen.
-    assert pipeline_time_ms(stages, microbatches=2, layers=10) == 23.
+    assert bottleneck_pipeline_time_ms(stages, microbatches=2, layers=10) == 23.
+    assert pipeline_time_ms(stages, microbatches=2, layers=10) >= 40.
 
 
 def test_independent_pipeline_matches_classic_fill_drain_and_shared_link_serializes():

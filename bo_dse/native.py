@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare and run measured A100 BO campaigns using the repository native suite."""
+"""Paper ECO: measured four-stage calibration, FIFO scheduling and residual GP BO."""
 from __future__ import annotations
 
 import argparse
@@ -16,22 +16,6 @@ import signal
 import subprocess
 import sys
 
-# New executions use upstream-only tools. Reproduction of the historical custom
-# path is deliberately explicit, including resumes of old campaigns.
-if __name__ == '__main__':
-    backend = 'official'
-    if '--backend' in sys.argv:
-        position = sys.argv.index('--backend')
-        if position + 1 >= len(sys.argv):
-            raise SystemExit('--backend needs official or customized')
-        backend = sys.argv.pop(position + 1)
-        sys.argv.pop(position)
-    if backend == 'official':
-        from official import main as official_main
-        official_main()
-        raise SystemExit(0)
-    if backend != 'customized':
-        raise SystemExit('--backend must be official or customized')
 import tempfile
 import time
 from types import SimpleNamespace
@@ -52,6 +36,7 @@ from static_dse.space import configuration, digest, enumerate_candidates, hard_f
 from build_deepseek_v6_four_stage_profile import load_four_stage_groups, summarize_reference_workload
 from four_stage_dse_v6.model import pipeline_time_ms
 from four_stage_dse_v6.attention_workload import common_context_target
+from static_dse.paper_model import MODEL as ENERGY_MODEL
 
 MODELS = {'qwen36': 'Qwen3.6-35B-A3B', 'deepseek-v2-lite': 'DeepSeek-V2-Lite-Chat'}
 # Dry-run metadata for the pinned models only. Physical preparation reads the
@@ -94,6 +79,8 @@ def invoke(config, arguments, **kwargs):
 
 
 def validate_context(config):
+    check(config.get('mechanism_model') == ENERGY_MODEL and config.get('require_four_stage') is True,
+          'Paper execution requires a new four-stage FIFO campaign; historical configs cannot be silently resumed')
     check(config['bo_runtime'] == bo_runtime(), 'BO Python/package environment changed')
     manifest = read_json(config['context_manifest'])
     for name, expected in manifest['files_sha256'].items():
@@ -440,6 +427,7 @@ def initial_inputs(args):
     check(len(rows) > 8, 'Calibration must contain more than eight warmup requests')
     check(args.seeds and len(set(args.seeds)) == len(args.seeds) and all(s >= 0 for s in args.seeds), 'Seeds must be distinct nonnegative integers')
     config = {'schema_version': 1, 'model': args.model, 'gpus': args.gpus, 'rps': args.rps,
+              'mechanism_model': ENERGY_MODEL, 'require_four_stage': True,
               'joint_space': joint,
               'energy_accounting': {'serving': 'active_gpus_only', 'tuning': 'active_gpus_only',
                                     'gpu_hours': 'reserved_allocation'},
@@ -566,6 +554,7 @@ def bootstrap_request(config, c, index):
 
 def prepare(config, retry_failed=False):
     directory = Path(config["config_path"]).parent
+    validate_context(config)
     with (directory / ".prepare.lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         if (directory / "READY.json").exists():
@@ -660,6 +649,7 @@ def prepare_locked(config, retry_failed=False):
                                   'tpot_ms': baseline['metrics']['tpot_ms'] * 1.05,
                                   'min_output_tps': baseline['metrics']['output_tps'] * .95}
     settings = {'selection_split': 'calibration', 'mode': 'physical', 'model_id': MODELS[config['model']],
+                'mechanism_model': ENERGY_MODEL,
                 **{k: str(inputs / (k + '.json')) for k in ('hardware', 'runtime', 'profile')},
                 'specification': str(inputs / 'space.json'), 'calibration_trace': config['trace']['path'],
                 'heldout_trace': config['heldout'], 'profile_trace_files': [config['trace']['path']],
@@ -676,7 +666,6 @@ def prepare_locked(config, retry_failed=False):
                 'bo': {'seed': config['seeds'][0], 'evaluation_seconds': 300, 'structure_switch_seconds': 300,
                        'knob_switch_seconds': 300, 'max_repeats': 2}}
     if config.get('joint_space'):
-        settings['workload']['allow_model_feedback_fallback'] = True
         settings['require_output_correctness'] = True
         settings['context_files']['correctness_reference'] = str(inputs / 'correctness-reference.json')
     check(settings['setup_cost']['gpu_hours'] < config['budget']['gpu_hours'], 'Bootstrap exhausted the GPU-hour budget')
@@ -705,7 +694,7 @@ def run(config, one=False):
     directory = Path(config['config_path']).parent
     check((directory / 'READY.json').exists(), 'Preparation did not finish; inspect bootstrap results')
     validate_context(config)
-    command = [sys.executable, str(BO / 'native.py'), '--backend', 'customized', 'evaluate', '--config', config['config_path']]
+    command = [sys.executable, str(BO / 'native.py'), '--backend', 'paper', 'evaluate', '--config', config['config_path']]
     if config['comparison']:
         while True:
             result = comparison_round(directory / 'comparison', command, timeout_seconds=config['trial_timeout_seconds'] + 300)
@@ -728,7 +717,7 @@ def run(config, one=False):
                 return result
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest='action', required=True)
     p = sub.add_parser('select-gpus', help='inspect physical GPU availability without loading models or setting clocks')
@@ -745,7 +734,7 @@ def main():
     p.add_argument('--space-mode', choices=('joint', 'legacy'), default='joint')
     p.add_argument('--parallel-degrees', nargs='+', type=int, default=list(range(1, 9)))
     p.add_argument('--microbatches', nargs='+', type=int, default=[1, 2, 4])
-    p.add_argument('--rps', type=int, choices=(1, 2, 4), default=1)
+    p.add_argument('--rps', type=int, choices=(1, 2, 4, 8, 16), default=4)
     p.add_argument('--evaluations', type=int, default=32)
     p.add_argument('--gpu-hours', type=float, default=8)
     p.add_argument('--native-python', type=Path, default=ROOT / '.venv/bin/python')
@@ -778,7 +767,7 @@ def main():
     p = sub.add_parser('recover', help='clean up an interrupted trial and charge it as failed')
     p.add_argument('directory', type=Path, help='top-level native experiment directory')
     p.add_argument('--campaign', type=Path, required=True, help='campaign or comparison arm containing the pending trial')
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if args.action == 'select-gpus':
         from gpu_selection import inspect
         import pynvml
@@ -807,6 +796,10 @@ def main():
                 structures, exclusions = enumerate_layouts(args.gpus, MODEL_EXPERTS[args.model],
                                                            args.microbatches, args.parallel_degrees)
             result = {'mode': 'dry_run', 'model': MODELS[args.model], 'gpus': args.gpus, 'rps': args.rps,
+                      'backend': 'paper', 'mechanism_model': ENERGY_MODEL,
+                      'require_four_stage': True, 'pipeline_model': 'finite_microbatch_fifo_v1',
+                      'energy_correction': 'standardized_log_energy_residual_gp',
+                      'missing_stage_feedback': 'failed_trial_no_external_prior_fallback',
                       'space_mode': args.space_mode, 'execution_verified': False,
                       'excluded_layouts': exclusions,
                       'supported_structures': structures,
@@ -831,10 +824,7 @@ def main():
         result = run(read_json(args.directory / 'native-config.json'), args.one)
     elif args.action == 'prepare':
         config = read_json(args.directory / 'native-config.json')
-        if (args.directory / 'READY.json').exists():
-            result = read_json(args.directory / 'READY.json')
-        else:
-            result = prepare(config, args.retry_failed)
+        result = prepare(config, args.retry_failed)
     elif args.action == 'cleanup':
         config = read_json(args.directory / 'native-config.json')
         marker = args.directory / 'CLEANUP_REQUIRED.json'
@@ -855,4 +845,5 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    from entrypoint import main as dispatch
+    dispatch()

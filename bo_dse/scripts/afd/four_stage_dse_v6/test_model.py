@@ -4,7 +4,7 @@ import copy
 
 import pytest
 
-from .model import STAGES, evaluate_candidate, pipeline_time_ms, select_candidate
+from .model import STAGES, evaluate_candidate, pipeline_time_ms, bottleneck_pipeline_time_ms, select_candidate
 
 
 def _candidate(candidate_id: str = "safe") -> dict:
@@ -16,7 +16,7 @@ def _candidate(candidate_id: str = "safe") -> dict:
         "microbatches": 2,
         "layers": 28,
         "requests_per_pipeline": 1,
-        "guard_pipeline_time_ms": 20.3,
+        "guard_pipeline_time_ms": 23.3,
         "stage_models": {
             stage: {
                 "intercept_ms": duration,
@@ -44,17 +44,29 @@ WORKLOAD = {
 }
 
 
-def test_pipeline_is_set_by_longest_stage_plus_fill_drain() -> None:
+def test_legacy_bottleneck_approximation_is_explicit() -> None:
     stage_times = dict(zip(STAGES, (10.0, 2.0, 8.0, 1.0), strict=True))
-    assert pipeline_time_ms(stage_times, microbatches=2, layers=28) == pytest.approx(
+    assert bottleneck_pipeline_time_ms(stage_times, microbatches=2, layers=28) == pytest.approx(
         20.0 + 11.0 / 28.0
     )
 
 
-def test_slower_non_bottleneck_only_changes_fill_drain() -> None:
+def test_default_fifo_respects_combine_before_next_layer() -> None:
+    # A single microbatch cannot overlap with itself, regardless of layer count.
+    stages = dict.fromkeys(STAGES, 10.)
+    assert pipeline_time_ms(stages, microbatches=1, layers=10) == pytest.approx(40.)
+    assert pipeline_time_ms(stages, microbatches=2, layers=10) >= 40.
+
+
+def test_default_fifo_serializes_dispatch_and_combine() -> None:
+    stages = dict.fromkeys(STAGES, 1.)
+    assert pipeline_time_ms(stages, microbatches=3, layers=1) == 7.
+
+
+def test_explicit_bottleneck_non_bottleneck_only_changes_fill_drain() -> None:
     base = dict(zip(STAGES, (10.0, 2.0, 8.0, 1.0), strict=True))
     slower = {**base, "ffn_compute": 9.0}
-    assert pipeline_time_ms(slower, microbatches=4, layers=28) - pipeline_time_ms(
+    assert bottleneck_pipeline_time_ms(slower, microbatches=4, layers=28) - bottleneck_pipeline_time_ms(
         base, microbatches=4, layers=28
     ) == pytest.approx(1.0 / 28.0)
 

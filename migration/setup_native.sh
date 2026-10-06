@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-if [[ "$#" == 0 || "${1:-}" == '--backend' && "${2:-}" == 'official' ]]; then
+if [[ "$#" == 2 && "$1" == '--backend' && ( "$2" == 'official' || "$2" == 'legacy-observable' ) ]]; then
   exec bash migration/setup_official.sh
 fi
-[[ "$#" == 2 && "$1" == '--backend' && "$2" == 'customized' ]] || {
-  echo 'Usage: setup_native.sh [--backend official|customized]' >&2; exit 2;
+[[ "$#" == 0 || "$#" == 2 && "$1" == '--backend' && ( "$2" == 'paper' || "$2" == 'customized' ) ]] || {
+  echo 'Usage: setup_native.sh [--backend paper|legacy-observable] (default: paper)' >&2; exit 2;
 }
 [[ "$(id -u)" == 0 ]] || { echo 'Run setup as root on the destination server.' >&2; exit 2; }
 [[ ! -f environment/PREPARED.json ]] || { echo 'Already prepared; do not mutate an active experiment environment.' >&2; exit 2; }

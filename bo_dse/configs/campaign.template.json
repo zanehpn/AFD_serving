@@ -6,14 +6,14 @@
   "hardware": "hardware.json",
   "runtime": "runtime.json",
   "profile": "profile.json",
-  "calibration_trace": "/REPLACE/calibration.jsonl",
-  "heldout_trace": "/REPLACE/heldout.jsonl",
+  "calibration_trace": "calibration.jsonl",
+  "heldout_trace": "heldout.jsonl",
   "profile_trace_files": [],
   "context_files": {
-    "model_config": "/REPLACE/model/config.json",
-    "plugin_source": "/REPLACE/plugin-source-manifest.json",
-    "launcher": "/REPLACE/measurement_executor.py",
-    "measurement_protocol": "/REPLACE/protocol.json"
+    "model_config": "model/config.json",
+    "plugin_source": "plugin-source-manifest.json",
+    "launcher": "measurement_executor.py",
+    "measurement_protocol": "protocol.json"
   },
   "workload": {
     "arrival_rate_rps": 1,
@@ -66,5 +66,6 @@
     "structure_switch_seconds": 180,
     "knob_switch_seconds": 2,
     "max_repeats": 2
-  }
+  },
+  "mechanism_model": "four_stage_fifo_v1"
 }

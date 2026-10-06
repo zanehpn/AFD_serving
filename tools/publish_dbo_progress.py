@@ -154,13 +154,13 @@ def main():
     write(dest / 'trace-isolation.json', isolation)
     shutil.copyfile(repo / 'tools/restore_dbo_checkpoint.py', dest / 'restore.py')
     shutil.copyfile(repo / 'tools/preflight_dbo_checkpoint.py', dest / 'preflight.py')
-    (dest / 'README.md').write_text('# 四卡 DBO 实验当前结果与代码快照\n\n'
-        f"快照时间：{summary['snapshot_utc']}。包含 {summary['observations']} 条优化器观测、{summary['search_receipts']} 份搜索回执、{summary['confirmation_receipts']} 份配置复测回执。失败和待记账结果均保留。\n\n"
-        '包含全部四个场景的搜索状态、请求回放、能耗采样、启动记录、原有冻结源码，以及 0123 / 0124 GPU 迁移代码、映射和验证记录。\n\n'
-        '当前用户指定剩余实验使用 GPU 0、1、2、4 串行续跑；旧结果不重跑。物理 GPU 在校准阶段发生过变化，比较应披露阶段差异。正式 heldout 尚未评测，不能据此宣称方法最终胜出。\n\n'
-        '恢复文件：`python3 restore.py restored-output`。这只恢复快照；旧 PID、端口、GPU UUID 和启动脚本不能直接用于另一台机器。\n\n'
-        '模型权重、容器、虚拟环境和编译缓存未打包，清单见 external-dependencies.json。所有归档分块和文件均有 SHA-256，恢复校验见 validation.json。\n\n'
-        '当前进度说明：[DBO_PROGRESS_20260915.md](../../docs/DBO_PROGRESS_20260915.md)。\n')
+    (dest / 'README.md').write_text('# Four-GPU DBO progress and source snapshot\n\n'
+        f"Snapshot time: {summary['snapshot_utc']}. Includes {summary['observations']} optimizer observations, {summary['search_receipts']} search receipts, and {summary['confirmation_receipts']} configuration-confirmation receipts. Failures and results awaiting accounting are retained.\n\n"
+        'Includes search states, request replays, energy samples, launch records, original frozen sources for all four scenarios, and GPU 0123 / 0124 migration code, mappings, and validation records.\n\n'
+        'The remaining experiments were scheduled to resume sequentially on GPUs 0, 1, 2, 4 without rerunning old results. Physical GPUs changed during calibration; comparisons must disclose these phase differences. Formal held-out evaluation remains pending, so these records do not establish a final winner.\n\n'
+        'Restore files with `python3 restore.py restored-output`. This restores only the snapshot; old PIDs, ports, GPU UUIDs, and launch scripts cannot be used directly on another host.\n\n'
+        'Model weights, containers, virtual environments, and build caches are excluded; see external-dependencies.json. Every archive part and file has a SHA-256 hash; restoration checks are recorded in validation.json.\n\n'
+        'Progress details: [DBO_PROGRESS_20260915.md](../../docs/DBO_PROGRESS_20260915.md).\n')
     with tempfile.TemporaryDirectory(prefix='dbo-checkpoint-verify-') as restored:
         output = subprocess.run([sys.executable, str(dest / 'restore.py'), restored], check=True, text=True, capture_output=True)
         # Verify the byte boundary inside the restored checkpoint, including aliases.

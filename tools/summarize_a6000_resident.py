@@ -38,17 +38,17 @@ def main():
         'rollout': 'Current search remains cold-start. Reuse requires a separately frozen, consistent cost protocol.',
     }
     (ROOT/'SUMMARY.json').write_text(json.dumps(summary, indent=2)+'\n')
-    lines = ['# A6000 常驻服务小规模验证结果', '',
-             'DeepSeek RPS4；每次 8 条预热、200 条 calibration；结果未进入搜索优化器。', '',
-             '| 测量 | 总耗时（秒） | 服务启动（秒） | 预热及回放（秒） |',
+    lines = ['# A6000 resident-service pilot results', '',
+             'DeepSeek RPS4; eight warmup and 200 calibration requests per measurement. Results were not fed into the search optimizer.', '',
+             '| Measurement | Total seconds | Service startup seconds | Warmup and replay seconds |',
              '|---|---:|---:|---:|']
     for r in status['rows']:
         lines.append(f"| {r['name']} | {r['cost']['wall_seconds']:.2f} | {r['phases'].get('start_services',0):.2f} | {r['phases'].get('measure_requests',0):.2f} |")
-    lines += ['', f"相同 A 配置冷启动对比常驻复用：节省 {cold_s-warm_s:.2f} 秒（{summary['elapsed_reduction_pct']:.1f}%），单次加速 {summary['speedup']:.2f} 倍。", '',
-              f"进程身份确实复用：{same_services}。全部请求完成且遥测有效：{summary['all_requests_completed'] and summary['all_telemetry_valid']}。搜索状态前后相同：{status['search_unchanged']}。队列已恢复：{status['queue_resumed']}。", '',
-              '每条件仅一次；该结果衡量兼容配置的单次工程收益，不能外推为整个搜索或 Qwen 的加速倍数。冷启动 B 的两种启动方式仅作额外参考，未进行随机交叉和重复测量。', '',
-              '当前四方法搜索仍使用原冷启动协议；未改候选顺序、尝试预算、trace、SLO 或 heldout 状态。整个验证预约期的成本单独保存在 SUMMARY.json 和原始 NVML 记录。', '',
-              '遥测及延迟变化见 SUMMARY.json；请求完成不代表输出语义等价。']
+    lines += ['', f"Cold start versus resident reuse for the same A configuration: saved {cold_s-warm_s:.2f} seconds ({summary['elapsed_reduction_pct']:.1f}%), a {summary['speedup']:.2f}x speedup for this measurement.", '',
+              f"Process identities reused: {same_services}. All requests completed and telemetry valid: {summary['all_requests_completed'] and summary['all_telemetry_valid']}. Search state unchanged: {status['search_unchanged']}. Queue resumed: {status['queue_resumed']}.", '',
+              'Each condition was measured once. This measures an engineering benefit for compatible configurations, not a speedup for the full search or Qwen. The two cold-start B launch modes are additional references; randomized crossovers and repeated measurements were not performed.', '',
+              'The four-method search retains its original cold-start protocol. Candidate order, attempt budgets, traces, SLOs, and held-out status are unchanged. Costs over the complete reserved validation period are recorded separately in SUMMARY.json and raw NVML records.', '',
+              'See SUMMARY.json for telemetry and latency changes. Request completion does not establish semantic output equivalence.']
     (ROOT/'RESULTS.md').write_text('\n'.join(lines)+'\n')
     print(json.dumps(summary, indent=2))
 

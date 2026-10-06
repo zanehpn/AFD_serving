@@ -96,8 +96,9 @@ def test_search_threshold_profiles_reach_both_role_commands():
                 assert command[command.index('--'+key.replace('_','-'))+1] == str(c[key])
 
 
-def test_original_default_is_read_only_and_custom_requires_explicit_option(tmp_path):
-    command = [sys.executable, str(BO/'native.py'), 'start', '--directory', str(tmp_path/'none'), '--dry-run']
+def test_historical_observable_backend_requires_explicit_option(tmp_path):
+    command = [sys.executable, str(BO/'native.py'), '--backend', 'legacy-observable',
+               'start', '--directory', str(tmp_path/'none'), '--dry-run']
     report = json.loads(subprocess.check_output(command, text=True))
     assert report['backend'] == 'official' and not report['execution_verified']
     assert report['structures'] == 18 and report['raw_candidates'] == 11250

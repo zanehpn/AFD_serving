@@ -54,19 +54,21 @@ def pipeline_time_ms(
     layers: int,
     schedule_model: Mapping[str, Any] | None = None,
 ) -> float:
-    """Return the legacy heuristic time under an assumed overlap schedule.
+    """Schedule finite microbatches through A/dispatch/F/combine and layers.
 
-    The longest stage determines the repeated steady-state term.  Other
-    stages contribute only fill/drain overhead amortized across decoder
-    layers. One deterministic bottleneck is retained when stages tie so the
-    formula remains continuous. This is not a conservative finite-microbatch
-    scheduling bound: it can miss closed-loop dependency and shared-resource
-    limits. See bo_dse/PROVISIONING_MIGRATION.md for the counterexample and the
-    requirements for replacing this prior with a calibrated schedule model.
+    Missing layer records use uniform weights. Dispatch and combine share a
+    resource by default; a new layer starts only after the preceding combine.
+    The bottleneck approximation is available only by its explicit function.
     """
     stages = validate_stage_times(stage_times_ms)
-    if schedule_model is not None:
-        return schedule_time(tuple(stages[s] for s in STAGES), microbatches, layers, schedule_model)
+    if schedule_model is None:
+        schedule_model = {'type': 'finite_microbatch_fifo_v1', 'communication': 'shared_roundtrip'}
+    return schedule_time(tuple(stages[s] for s in STAGES), microbatches, layers, schedule_model)
+
+
+def bottleneck_pipeline_time_ms(stage_times_ms: Mapping[str, float], *, microbatches: int, layers: int) -> float:
+    """Historical simplified-pipeline approximation, never the default prior."""
+    stages = validate_stage_times(stage_times_ms)
     if microbatches < 1:
         raise ValueError("microbatches must be >= 1")
     if layers < 1:

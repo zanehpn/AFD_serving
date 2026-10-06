@@ -59,9 +59,9 @@ def report(root):
         writer.writeheader()
         writer.writerows(trials)
     (root/'trials.csv.tmp').replace(root/'trials.csv')
-    lines = ['# A6000 四方法搜索进度', '', f"更新时间：{summary['updated_at']}", '',
-             '仅汇总本机 calibration；旧 A100 结果单独保留。尚未执行 heldout。', '',
-             '| 场景 | 方法 | 搜索尝试 | 失败 | 满足当前 SLO | 最低可行能耗 J |',
+    lines = ['# A6000 four-method search progress', '', f"Updated: {summary['updated_at']}", '',
+             'This summary covers local calibration only. Historical A100 results remain separate. Held-out evaluation has not run.', '',
+             '| Scenario | Method | Search attempts | Failed | Current SLO feasible | Lowest feasible energy J |',
              '|---|---|---:|---:|---:|---:|']
     for row in rows:
         energy = f"{row['best']['metrics']['energy_j']:.2f}" if row['best'] else '—'
